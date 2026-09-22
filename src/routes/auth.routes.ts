@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { pool } from "../database";
 import jwt from "jsonwebtoken";
+import { authenticate } from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -160,6 +161,37 @@ router.post("/login", async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Unable to log in",
+    });
+  }
+});
+
+router.get("/me", authenticate, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, email, role, created_at
+       FROM users
+       WHERE id = $1`,
+      [req.user!.userId]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({
+        status: "error",
+        message: "User not found",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      status: "success",
+      user: result.rows[0],
+    });
+  } catch (error) {
+    console.error("User profile error:", error);
+
+    res.status(500).json({
+      status: "error",
+      message: "Unable to retrieve user profile",
     });
   }
 });
