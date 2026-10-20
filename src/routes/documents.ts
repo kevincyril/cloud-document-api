@@ -1,9 +1,14 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware";
 import { upload } from "../middleware/upload";
-import { saveFile, deleteFile } from "../services/storage";
 import { pool } from "../database";
-
+import { analyzeText } from "../services/text-processing";
+import {
+  saveFile,
+  deleteFile,
+  getFilePath,
+  readTextFile,
+} from "../services/storage";
 const router = Router();
 
 router.post(
@@ -99,10 +104,11 @@ router.get("/:id", authenticate, async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT id, original_name, mime_type, size_bytes,
-              status, created_at
+              status, created_at, extracted_text,
+              word_count, character_count, processed_at
        FROM documents
        WHERE id = $1 AND user_id = $2`,
-      [documentId, req.user!.userId],
+      [documentId, req.user!.userId]
     );
 
     if (result.rows.length === 0) {
@@ -116,6 +122,129 @@ router.get("/:id", authenticate, async (req, res, next) => {
     res.status(200).json({
       status: "ok",
       document: result.rows[0],
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id/download", authenticate, async (req, res, next) => {
+  const documentId = req.params.id;
+
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  if (typeof documentId !== "string" || !uuidPattern.test(documentId)) {
+    res.status(400).json({
+      status: "error",
+      message: "Invalid document ID",
+    });
+    return;
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT original_name, storage_key
+       FROM documents
+       WHERE id = $1 AND user_id = $2`,
+      [documentId, req.user!.userId],
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({
+        status: "error",
+        message: "Document not found",
+      });
+      return;
+    }
+
+    const document = result.rows[0];
+    const filePath = getFilePath(document.storage_key);
+
+    res.download(filePath, document.original_name, (error) => {
+      if (error) {
+        next(error);
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/process", authenticate, async (req, res, next) => {
+  const documentId = req.params.id;
+
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  if (typeof documentId !== "string" || !uuidPattern.test(documentId)) {
+    res.status(400).json({
+      status: "error",
+      message: "Invalid document ID",
+    });
+    return;
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT id, mime_type, storage_key
+       FROM documents
+       WHERE id = $1 AND user_id = $2`,
+      [documentId, req.user!.userId],
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({
+        status: "error",
+        message: "Document not found",
+      });
+      return;
+    }
+
+    const document = result.rows[0];
+
+    if (document.mime_type !== "text/plain") {
+      res.status(415).json({
+        status: "error",
+        message: "Processing currently supports only text files",
+      });
+      return;
+    }
+
+    const text = await readTextFile(document.storage_key);
+    const analysis = analyzeText(text);
+
+    const savedResult = await pool.query(
+      `UPDATE documents
+   SET extracted_text = $1,
+       word_count = $2,
+       character_count = $3,
+       processed_at = CURRENT_TIMESTAMP,
+       status = 'completed',
+       updated_at = CURRENT_TIMESTAMP
+   WHERE id = $4 AND user_id = $5
+   RETURNING id`,
+      [
+        analysis.text,
+        analysis.wordCount,
+        analysis.characterCount,
+        documentId,
+        req.user!.userId,
+      ],
+    );
+
+    if (savedResult.rows.length === 0) {
+      res.status(404).json({
+        status: "error",
+        message: "Document not found",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      status: "ok",
+      documentId: document.id,
+      analysis,
     });
   } catch (error) {
     next(error);

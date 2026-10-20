@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { mkdir, writeFile, unlink } from "node:fs/promises";
+import { mkdir, writeFile, unlink, readFile } from "node:fs/promises";
 
 const uploadDirectory = path.resolve("uploads");
 
@@ -21,4 +21,14 @@ export async function deleteFile(storageKey: string): Promise<void> {
   const filePath = path.join(uploadDirectory, storageKey);
 
   await unlink(filePath);
+}
+
+export function getFilePath(storageKey: string): string {
+  return path.join(uploadDirectory, storageKey);
+}
+
+export async function readTextFile(storageKey: string): Promise<string> {
+  const filePath = getFilePath(storageKey);
+
+  return readFile(filePath, "utf8");
 }
