@@ -3,7 +3,10 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { pool } from "../database";
 import jwt from "jsonwebtoken";
-import { authenticate } from "../middleware/auth.middleware";
+import {
+  authenticate,
+  authorize,
+} from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -195,5 +198,17 @@ router.get("/me", authenticate, async (req, res) => {
     });
   }
 });
+
+router.get(
+  "/admin-test",
+  authenticate,
+  authorize("admin"),
+  (_req, res) => {
+    res.status(200).json({
+      status: "success",
+      message: "You have access to the admin endpoint",
+    });
+  }
+);
 
 export default router;

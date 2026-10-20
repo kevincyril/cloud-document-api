@@ -2,6 +2,7 @@ import authRouter from "./routes/auth.routes";
 import express from "express";
 import dotenv from "dotenv";
 import { pool } from "./database";
+import documentRouter from "./routes/documents";
 
 dotenv.config();
 
@@ -10,6 +11,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use("/auth", authRouter);
+app.use("/documents", documentRouter);
 
 app.get("/health", async (_req, res) => {
   try {
