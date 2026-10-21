@@ -193,9 +193,16 @@ The parser suggests a plausible business header (including a business name besid
 a RECEIPT/INVOICE heading), one unambiguous numeric purchase date, one explicitly
 labeled total, and a supported identifiable currency. A detected amount is retained
 even when the currency is uncertain; the user must select a currency before saving.
+A dollar amount with a city/state/ZIP US-style address can suggest USD, with a
+visible warning to verify that address-based inference. Explicit currency codes
+take precedence; a dollar sign alone or conflicting country evidence stays unresolved.
 It does not parse line items, interpret policy text, or use OCR confidence as field
 proof. Dates such as `10/11/2026` are not automatically chosen: the form offers
-explicit calendar-date interpretations for the user to select. Labeled receipt/
+explicit calendar-date interpretations for the user to select. If another labeled
+date consistently establishes day/month or month/day order, that order can prefill
+a labeled receipt date, with a warning and alternative choices retained. Mixed
+format evidence does not choose an interpretation. Other date values are never
+copied into the purchase field merely because they establish formatting. Labeled receipt/
 purchase dates take priority over unrelated dates, and payment due dates are
 excluded. Multiple distinct dates or totals are flagged. `$` alone is not enough
 to choose USD/CAD/AUD. Currency codes, US$,
@@ -224,8 +231,11 @@ real OCR path as an uploaded image, with no hidden prefilled results.
 A user-supplied multi-column repair receipt exposed two parser mistakes: a
 business name beside the RECEIPT heading was rejected, and a correctly recognized
 total was discarded when its currency was unknown. The fix separates those fields
-and supports split TOTAL/value lines. The ambiguous receipt date offers explicit
-choices; a separate payment due date is not treated as a purchase or return date.
+and supports split TOTAL/value lines. The receipt date can use an unambiguous date
+elsewhere to suggest formatting, with explicit alternatives retained. Its US-style
+address plus a dollar amount can suggest USD. Both contextual suggestions are
+visibly flagged for review; a payment due date is never copied into the purchase
+or return deadline fields.
 The file was used only in local OCR/browser verification and was not committed or
 published. Set `RECEIPT_TEST_IMAGE` when running the local Chromium browser suite
 to opt into this private regression check; deterministic tests use generic text.

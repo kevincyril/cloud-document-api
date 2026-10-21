@@ -36,7 +36,7 @@ test('multi-column receipt headings and dollar totals remain useful without assu
   assert.equal(result.merchant, 'Example Repair Ltd.');
   assert.equal(result.amount, '154.06');
   assert.equal(result.currency, null);
-  assert.equal(result.purchaseDate, null);
+  assert.equal(result.purchaseDate, '2019-02-11');
   assert.deepEqual(U.receiptDateReview(text).candidates, ['2019-02-11', '2019-11-02']);
   assert.ok(result.warnings.some(w => /Payment due dates/.test(w)));
   assert.ok(!result.warnings.some(w => /Total is missing/.test(w)));
@@ -53,6 +53,22 @@ test('standalone headings and split total labels work without choosing subtotal 
   assert.equal(result.merchant, 'Example Repair Ltd.'); assert.equal(result.amount, '154.06'); assert.equal(result.currency, null);
   assert.equal(U.parseReceipt('EXAMPLE SHOP\nTOTAL $10.00\nTOTAL $11.00').amount, null);
   assert.equal(U.parseReceipt('EXAMPLE SHOP\nSubtotal $10.00\nCash $20.00').amount, null);
+});
+test('US address context prefills dollars as a reviewable USD suggestion', () => {
+  const result = U.parseReceipt('EXAMPLE REPAIR\nNew York, NY 12210\nReceipt Date 11/02/2019\nDue Date 26/02/2019\nTOTAL $154.06');
+  assert.equal(result.currency, 'USD'); assert.equal(result.purchaseDate, '2019-02-11'); assert.equal(result.amount, '154.06');
+  assert.ok(result.warnings.some(w => /USD suggested/.test(w)));
+  assert.ok(result.warnings.some(w => /day\/month\/year/.test(w)));
+  assert.equal(U.parseReceipt('SHOP\nNew York, NY 12210\nTOTAL CAD 10.00').currency, 'CAD');
+  assert.equal(U.parseReceipt('SHOP\nNew York, NY 12210\nCanada\nTOTAL $10.00').currency, null);
+  assert.equal(U.parseReceipt('SHOP\nNY\nTOTAL $10.00').currency, null);
+  assert.equal(U.parseReceipt('SHOP\nTOTAL $10.00').currency, null);
+});
+test('consistent date format can prefill a receipt date while conflicting formats cannot', () => {
+  assert.equal(U.parseReceipt('SHOP\nReceipt Date 11/02/2019\nDue Date 02/26/2019').purchaseDate, '2019-11-02');
+  assert.equal(U.parseReceipt('SHOP\nReceipt Date 11/02/2019\nDue Date 26/02/2019\nDelivery Date 02/27/2019').purchaseDate, null);
+  assert.equal(U.parseReceipt('SHOP\nDue Date 26/02/2019').purchaseDate, null);
+  assert.equal(U.parseReceipt('SHOP\nReceipt Date 11/02/2019\nP.O.# 26/02/2019').purchaseDate, null);
 });
 test('calendar is an all-day event, escapes injection, and folds UTF-8 by octets', () => {
   const id = randomUUID();

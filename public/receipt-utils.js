@@ -44,10 +44,21 @@
       return remainder || (/^\d{1,4}[/-]\d{1,2}[/-]\d{2,4}$/.test(lines[index + 1] || '') ? lines[index + 1] : '');
     }).filter(value => value !== null);
     const evidence = labeled.length ? labeled : lines.filter(line => !/due\s*date|payment\s*due|ship(?:ping)?\s*date|delivery\s*date|expir|return\s*(?:by|date|deadline)|\bp\.?\s*o\.?\s*#/i.test(line));
-    const dates = new Set(); let invalid = false;
+    // A separate labeled date can establish formatting, never the purchase value.
+    // Mixed day-first/month-first evidence deliberately establishes no convention.
+    const orders = new Set();
+    for (const line of lines.filter(line => /\b(?:receipt|purchase|transaction|sale|due|shipping|delivery)\s*date\b|payment\s*(?:is\s*)?due/i.test(line))) {
+      for (const match of line.matchAll(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b/g)) {
+        const a = Number(match[1]), b = Number(match[2]);
+        if (a > 12 && b <= 12 && validDate(`${match[3]}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}`)) orders.add('day-first');
+        if (b > 12 && a <= 12 && validDate(`${match[3]}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`)) orders.add('month-first');
+      }
+    }
+    const order = orders.size === 1 ? [...orders][0] : null;
+    const dates = new Set(), preferred = new Set(); let invalid = false;
     for (const line of evidence) {
       for (const match of line.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
-        if (validDate(match[0])) dates.add(match[0]); else invalid = true;
+        if (validDate(match[0])) { dates.add(match[0]); preferred.add(match[0]); } else invalid = true;
       }
       for (const match of line.matchAll(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b/g)) {
         const a = Number(match[1]), b = Number(match[2]);
@@ -55,11 +66,14 @@
           `${match[3]}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}`].filter(validDate);
         if (!options.length) invalid = true;
         options.forEach(date => dates.add(date));
+        if (options.length === 1) preferred.add(options[0]);
+        else if (order) preferred.add(`${match[3]}-${String(order === 'day-first' ? b : a).padStart(2, '0')}-${String(order === 'day-first' ? a : b).padStart(2, '0')}`);
       }
     }
     const candidates = [...dates].sort();
-    return { purchaseDate: !invalid && candidates.length === 1 ? candidates[0] : null,
-      candidates: !invalid && candidates.length > 1 ? candidates.slice(0, 4) : [], labeled: labeled.length > 0 };
+    const inferredOrder = !invalid && labeled.length > 0 && candidates.length > 1 && order && preferred.size === 1 ? order : null;
+    return { purchaseDate: !invalid && candidates.length === 1 ? candidates[0] : inferredOrder ? [...preferred][0] : null,
+      candidates: !invalid && candidates.length > 1 ? candidates.slice(0, 4) : [], labeled: labeled.length > 0, inferredOrder };
   }
   function parseReceipt(text) {
     text = String(text).slice(0, 30000);
@@ -76,13 +90,21 @@
     }
     if (!merchant) warnings.push('Merchant is uncertain; enter the store name.');
     const dateReview = receiptDateReview(text), purchaseDate = dateReview.purchaseDate;
+    if (dateReview.inferredOrder) warnings.push(`Receipt date suggested using ${dateReview.inferredOrder === 'day-first' ? 'day/month/year' : 'month/day/year'} formatting from another labeled date. Verify it or choose the alternative below.`);
     if (!purchaseDate) warnings.push(dateReview.candidates.length ? 'Receipt date is ambiguous. Choose the correct interpretation below or enter it manually.' : 'Purchase date was not clearly identified; check the receipt and enter it if known.');
     if (/due\s*date|payment\s*(?:is\s*)?due/i.test(text)) warnings.push('Payment due dates are not purchase dates or return deadlines.');
     const codes = new Set((text.match(/\b(?:USD|CAD|EUR|GBP|AUD|JPY|KWD)\b/g) || []));
     if (/US\$/.test(text)) codes.add('USD');
     if (/€/.test(text)) codes.add('EUR');
     if (/£/.test(text)) codes.add('GBP');
-    const currency = codes.size === 1 ? [...codes][0] : null;
+    let currency = codes.size === 1 ? [...codes][0] : null;
+    // Address context is a reviewable suggestion, not proof of currency. Do not
+    // guess from a dollar sign alone, a bare state abbreviation, or a filename.
+    const usAddress = /\b[A-Za-z][A-Za-z .'-]+,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\s+\d{5}(?:-\d{4})?\b/.test(text);
+    const otherRegion = /\b(?:Canada|Australia|New Zealand|Hong Kong|Singapore)\b|\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b/i.test(text);
+    if (codes.size === 0 && /\$/.test(text) && usAddress && !otherRegion) {
+      currency = 'USD'; warnings.push('USD suggested from the US-style address and $ symbol. Verify the currency before saving.');
+    }
     if (!currency) warnings.push('Choose the currency. A $ symbol alone can mean USD, CAD, AUD, or another dollar currency.');
     const totals = [];
     const totalLine = /^(?:(?:grand|sale)\s+)?total\s*:?\s*(?:(?:USD|CAD|EUR|GBP|AUD|JPY|KWD|US\$|[$€£])\s*)?(\d{1,9}(?:\.\d{1,3})?)\s*(?:USD|CAD|EUR|GBP|AUD|JPY|KWD)?$/i;

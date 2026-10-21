@@ -137,10 +137,10 @@ test('browser receipt OCR, review, deadline, private originals, calendar, fallba
       await wait('document.getElementById("raw-ocr").textContent.includes("East Repair") && !document.getElementById("purchase-save").disabled', 60000);
       assert.equal(await evaluate('document.getElementById("purchase-merchant").value'), 'East Repair Inc.');
       assert.equal(await evaluate('document.getElementById("purchase-amount").value'), '154.06');
-      assert.equal(await evaluate('document.getElementById("purchase-currency").value'), '');
-      assert.equal(await evaluate('document.getElementById("purchase-date").value'), '');
+      assert.equal(await evaluate('document.getElementById("purchase-currency").value'), 'USD');
+      assert.equal(await evaluate('document.getElementById("purchase-date").value'), '2019-02-11');
       assert.equal(await evaluate('document.getElementById("deadline-source").value'), 'none');
-      assert.equal(await evaluate('document.getElementById("purchase-form").checkValidity()'), false);
+      assert.equal(await evaluate('document.getElementById("purchase-form").checkValidity()'), true);
       assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#receipt-date-choices button"),b=>b.dataset.date)'), ['2019-02-11','2019-11-02']);
       await evaluate(`document.querySelector('#receipt-date-choices button').click();document.getElementById('purchase-currency').value='USD'`);
       assert.equal(await evaluate('document.getElementById("purchase-form").checkValidity()'), true);
