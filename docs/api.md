@@ -1,8 +1,8 @@
 # Try the API in PowerShell
 
-Local next-version status: private search and source-unit retrieval are
-implemented. Apply migration 005 to your local database and reprocess documents
-before testing. The current live API has not been updated with these changes.
+Private search and source-unit retrieval are deployed. For local development,
+apply migration 005 to your local database and reprocess documents before testing.
+Public browser: https://cloud-document-api.onrender.com/app/.
 
 Start the local API first. Registration and login use API account credentials;
 they are different from your PostgreSQL credentials. These commands prompt

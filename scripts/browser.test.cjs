@@ -55,7 +55,7 @@ test('browser registration, extraction, private search, source inspection, downl
     await command('Runtime.enable');
     await command('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1000, deviceScaleFactor: 1, mobile: false });
     await command('Page.navigate', { url: base + '/app/' });
-    await wait('Boolean(document.getElementById("auth-toggle"))');
+    await wait('document.readyState === "complete" && typeof request === "function" && Boolean(document.getElementById("auth-toggle"))');
     const password = randomUUID(), email = `browser-${randomUUID()}@example.com`;
     await evaluate(`document.getElementById('auth-toggle').click(); document.getElementById('name').value='Browser tester'; document.getElementById('email').value=${JSON.stringify(email)}; document.getElementById('password').value=${JSON.stringify(password)}; document.getElementById('auth-form').requestSubmit();`);
     await wait('!document.getElementById("workspace").hidden && !document.getElementById("refresh").disabled');

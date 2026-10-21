@@ -26,11 +26,10 @@ successful deployment. TLS verification uses the downloaded Supabase CA in a
 Render secret file named `supabase-ca.pem`, with
 `DB_SSL_CA_FILE=/etc/secrets/supabase-ca.pem` and `DB_SSL=true`.
 
-The browser UI and page-level private search in this checkout are prepared
-locally for review, not deployed. Migration 005 has not been applied to live
-Supabase. A future approved deploy will apply it through the build command;
-existing documents will then need reprocessing before they appear in search.
-No cloud changes, commits, or pushes are part of this documentation/UI update.
+The browser UI and page-level private search were published after explicit
+user approval. Migration 005 is recorded in live Supabase; the table has RLS
+enabled and no public/browser database access. Existing documents need
+reprocessing before they appear in search.
 
 ### Remaining work for the current version
 
@@ -39,12 +38,37 @@ No cloud changes, commits, or pushes are part of this documentation/UI update.
   longer needed; object removal is separate from database cascade deletion.
 - Monitor Free usage and back up data worth keeping. Recover interrupted
   `processing` claims using the documented stopped-instance procedure if needed.
-- Review the local browser UI and its local test results before authorizing a
-  separate publication/deployment. Repeat browser smoke checks after deployment.
+- The reviewed browser UI is now public. Repeat browser smoke checks after
+  future deployment changes.
 
 Redis/BullMQ, shared rate limiting, parser isolation, quotas/deletion, OCR,
 summarization, and automated backups are optional future work, not completed
 features or prerequisites for the current small portfolio demo.
+
+## Searchable-workspace release: October 20, 2026
+
+- Implementation commit: `9c0b38d`; GitHub Actions passed before deployment.
+- Render deployment `dep-dbc2p9hsrm7s739ev8v0` reached `live` on that revision.
+- Public interface: https://cloud-document-api.onrender.com/app/.
+- `/health` returned 200 with database connected; `/app/` returned HTML; anonymous
+  `/search` returned 401. Supabase migration history includes migration 005.
+- A real Edge browser check against the public site registered/logged in, uploaded
+  generated PDF/text files, processed and searched them, opened PDF page 3 and
+  text-file sources, and downloaded identical original bytes. A second account
+  had no matching results and received 404 for the first account's metadata,
+  download, processing, and source-unit requests.
+- This complements local automated tests and the owner's earlier restart/hash
+  checks. The new release was not restarted solely for this verification.
+- Supabase security advisors reported informational RLS-without-policy notices
+  for the four application/history tables. This is expected for the current
+  server-owner connection model: RLS is enabled, browser role access is revoked,
+  and ownership is enforced by Express queries. See the
+  [Supabase linter explanation](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
+- Two disposable smoke-check accounts and two small generated original files
+  remain for trusted maintenance cleanup; no existing user document was opened
+  or reprocessed. Remove stored objects separately from cascading database rows.
+- A small form-fallback hardening follow-up uses POST for login/upload when
+  JavaScript is not ready. Its local browser check passed before publication.
 
 ## Free-tier boundaries
 

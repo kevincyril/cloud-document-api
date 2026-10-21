@@ -88,8 +88,8 @@ The API is deployed at https://cloud-document-api.onrender.com on Render Free
 with a Supabase Free database and private storage bucket. The owner reported
 successful manual production smoke checks (health/schema, PDF extraction, saved
 results, identical SHA-256 downloads before/after restart, and cross-account
-404 ownership checks). These complement automated tests. The browser interface
-at `/app/` is a local implementation awaiting review and deployment. No resources are created by cloning or running tests. Follow
+404 ownership checks). These complement automated tests. The browser interface is public at
+https://cloud-document-api.onrender.com/app/. No resources are created by cloning or running tests. Follow
 [the deployment guide](docs/deployment.md); `render.yaml` contains placeholders
 for server-side secrets. Existing local documents are not automatically moved.
 
@@ -109,14 +109,14 @@ for server-side secrets. Existing local documents are not automatically moved.
   deletion/retention endpoint or per-user storage quota yet; monitor demo usage
   and remove test objects through trusted maintenance.
 - Free hosting may sleep/pause and has no uptime guarantee. The deployed API
-  passed owner-run smoke checks; the new browser interface is not deployed yet.
+  passed owner-run smoke checks; the searchable browser workspace is deployed and passed a generated-data browser smoke check.
 
 Future work: Redis/BullMQ workers, shared rate limits, parser resource limits,
 storage quotas/deletion, OCR, and automated backups.
 
 ## Browser interface and learning guide
 
-The searchable workspace is prepared locally for review. Migration 005 stores
+The searchable workspace is deployed on the existing Render Free service. Migration 005 stores
 PDF pages/text units with a full-text GIN index. Search returns ranked excerpts
 and physical PDF page numbers (null for text files), with ownership derived from
 JWTs. Existing documents need Extract again to populate the index. English word
@@ -133,4 +133,4 @@ and [architecture walkthrough](docs/architecture.md).
 
 Run `npm run test:browser` for the local Edge/Chromium end-to-end flow. See
 [setup](docs/setup.md) before applying migration 005 to your local database.
-The new schema and UI are not deployed; future publication requires review.
+Migration 005 and the public UI are deployed; existing documents require Extract again to become searchable.

@@ -1,8 +1,8 @@
 # Database setup and migrations
 
 The searchable workspace adds migration `005_document_pages_and_search.sql`.
-Apply it only to a reviewed local database for now; no live schema change has
-been authorized. Keep previously applied migrations unchanged.
+It is recorded in the deployed Supabase database. For local development, apply
+it to your own local database. Keep previously applied migrations unchanged.
 
 Use PostgreSQL 14 or newer (tested locally with 18). Create an empty database
 named `cloud_document_api` in pgAdmin. Fill in `.env` privately using

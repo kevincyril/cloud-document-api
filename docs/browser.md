@@ -41,8 +41,11 @@ Secrets remain in server environment settings. Sign-out discards the browser's
 token but cannot revoke a JWT already copied elsewhere. The current app has no
 password reset, account/document deletion UI, or persistent browser sessions.
 
-The browser UI is not deployed. Publication and production browser smoke checks
-are separate steps after review. See deployment.md for the verified API status.
+The browser UI is deployed at https://cloud-document-api.onrender.com/app/.
+A real Edge production smoke check verified registration/login, PDF/text upload,
+processing, search, PDF page 3/text source inspection, identical original
+downloads, and two-account search isolation plus cross-account 404 responses.
+See deployment.md for the release checkpoint.
 
 ## Automated local verification
 
@@ -64,10 +67,10 @@ it does not install a browser and is not added to CI's existing API workflow.
 Local implementation checks passed: `npm run check` (33 unit/HTTP tests plus
 TypeScript, config/docs validation, and build), the integration suite in both
 source and compiled modes, and the headless Edge browser flow. A screenshot was
-also visually reviewed. These local results do not establish that the new UI
-is available on the production service.
+also visually reviewed. These local tests complement the separate production smoke check above.
 
 The normal local database was verified to match original migrations 001-003,
 its baseline recorded, and migrations 004-005 applied locally during this work.
-Live Supabase was not changed. Existing local completed documents need Extract
+During the separately approved publication, Render also applied migration 005
+to live Supabase. Existing local completed documents need Extract
 again before search can find their contents.

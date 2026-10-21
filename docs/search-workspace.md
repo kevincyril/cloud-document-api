@@ -1,8 +1,8 @@
 # Searchable workspace: local review checkpoint
 
-All three milestones are implemented locally; no new version has been published.
-The deployed API smoke checks in deployment.md apply to the earlier deployed
-version. They do not establish production availability of search or the browser.
+All three milestones are implemented and deployed after explicit user approval.
+The public interface is https://cloud-document-api.onrender.com/app/.
+Deployment and production smoke-check evidence are recorded in deployment.md.
 
 ## 1. Page-aware extraction
 
@@ -64,13 +64,14 @@ The local browser test registers/logs in, uploads/processes PDF and text, search
 inspects PDF page 3 and text sources, checks original download bytes, and covers
 no matches, HTML-like text, upload/processing failures, and expired-session cleanup.
 
-## Publication remains a separate decision
+## Approved publication
 
-Local migration/application review comes first. Nothing has been committed,
-pushed, deployed, or changed in live Supabase for this work. After approval, the
-same Render Free service can serve the public interface at `/app/`; registration
-is public, while all document/search operations require the owner's token.
-Check the public UI and two-account isolation after any future approved deployment.
+After local review and explicit approval, the implementation was committed,
+pushed, and deployed to the existing Render Free service. Its build applied
+migration 005 to live Supabase. Registration is public, while document/search
+operations require the owner's token. Production browser verification exercised
+the full PDF/text search flow and two-account isolation. Future changes should
+repeat those checks; existing documents require explicit reprocessing.
 
 OCR, AI chat/summaries, embeddings, format conversion, and Redis/BullMQ are not
 implemented. The earlier reported PDF failure remains undiagnosed with that

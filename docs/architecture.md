@@ -4,8 +4,8 @@
 
 “I built a document application that privately stores PDF and UTF-8 text files,
 extracts their text, and persists word and character counts. I deployed the API
-on Render Free with Supabase PostgreSQL and private object storage. A browser
-interface is prepared locally for review.” It does not perform OCR or summarization.
+on Render Free with Supabase PostgreSQL and private object storage. The browser
+interface is served publicly by the same Express service at `/app/`.” It does not perform OCR or summarization.
 
 ## 2. Entry points and browser
 
