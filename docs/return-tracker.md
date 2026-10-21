@@ -3,8 +3,12 @@
 The existing application has been extended in place with private JPEG/PNG
 uploads, browser OCR, editable purchase details, confirmed return deadlines,
 a responsive purchase dashboard, a synthetic sample flow, and calendar export.
-This implementation is local and uncommitted; nothing has been pushed, deployed,
-or migrated against production. There are no automatic email/SMS/app reminders.
+The implementation was reviewed, committed, and deployed on October 21, 2026
+(application commit `f47722b`, Render deploy `dep-dbchlhks728c7396m230`). GitHub
+Actions passed and migration 006 is applied. Health, dashboard HTML, authentication,
+and database access restrictions are verified. **Live receipt verification remains
+pending:** the private bucket still reports only PDF/text MIME types; JPEG/PNG must
+be added through its settings. There are no automatic email/SMS/app reminders.
 
 ## Architecture and milestones
 
@@ -127,13 +131,12 @@ No browser Supabase keys or new services are introduced.
 Migration `006_purchases.sql` uses the existing numbered SQL runner. Historical
 migrations are unchanged. **Do not run the migration with the current `.env`
 unless its database has been verified as an intended local test database.**
-Review and separately authorize production schema/deployment changes first.
-The existing Render deployment configuration is unchanged; the migration will
-run through its existing deployment migration command when deployment is authorized.
+Production publication was authorized after local review. Render's existing build
+command applied migration 006 successfully. The table has RLS enabled and no
+anon/authenticated SELECT access. The existing Render configuration is unchanged.
 No new environment variables or services are required. Exact dependencies and
-lockfile changes are present for local review, with no commits made. A separately
-authorized release must also add JPEG/PNG to the existing private bucket's MIME
-allowlist; see [deployment notes](deployment.md).
+lockfile changes are committed. The private bucket's JPEG/PNG MIME allowlist update
+is still required to finish live verification; see [deployment notes](deployment.md).
 
 `npm run check` includes deterministic money/date/deadline tests.
 `npm run test:integration` uses the configured database in disposable schemas;

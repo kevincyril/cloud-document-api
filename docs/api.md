@@ -11,7 +11,8 @@ continues to process only PDF/text; receipt OCR runs in the browser. Raw OCR and
 suggestions are untrusted, bounded input saved separately from confirmed fields.
 `GET /purchases/:id/calendar` downloads an all-day `.ics` for the saved confirmed
 deadline (409 if absent, 404 for a missing/other-owner purchase). It schedules no
-application reminder. The public deployment has not been updated by this work.
+application reminder. Application commit `f47722b` is deployed with migration 006;
+live image uploads still await the private bucket's JPEG/PNG MIME allowlist update.
 
 # Try the API in PowerShell
 

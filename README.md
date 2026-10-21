@@ -5,8 +5,10 @@ correct the suggestions, and confirm your return deadline. A responsive dashboar
 shows days remaining, saved originals, and Returned status. Export an all-day
 calendar event; this app does not send emails, SMS, or automatic reminders.
 
-This is a local implementation awaiting review; it has not been published to the
-existing Render service. The existing PDF/text extraction and private search
+The reviewed implementation is deployed at https://cloud-document-api.onrender.com/app/.
+**Release check pending:** the private Supabase bucket still allows PDF/text only;
+JPEG/PNG uploads need its MIME allowlist updated before live receipt verification.
+The existing PDF/text extraction and private search
 remain available under **Private document library & search**. Built with
 TypeScript, Express, PostgreSQL, JWT authentication, Tesseract.js, and private
 Supabase/local storage. See [architecture, correctness, and limitations](docs/return-tracker.md).

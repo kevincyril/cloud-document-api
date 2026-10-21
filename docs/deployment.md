@@ -1,7 +1,17 @@
 # Return tracker migration status
 
-The purchase API requires migration `006_purchases.sql`. This is local work only;
-production application and schema changes require separate review and authorization.
+Release checkpoint, October 21, 2026: commit `f47722b` passed GitHub Actions run
+`39666822190` and Render deploy `dep-dbchlhks728c7396m230` is live. Its build applied
+migration 006. `/health` and `/app/` return 200, the receipt dashboard is present,
+and anonymous `/purchases` returns 401. The new table enables RLS and revokes
+anon/authenticated SELECT access. Runtime error checks after rollout found no errors.
+
+**Pending:** the bucket still reports `application/pdf` and `text/plain` only.
+The owner needs to save the JPEG/PNG allowlist below before the live receipt/OCR
+smoke check can run. No live upload success is claimed at this checkpoint.
+
+The purchase API requires migration `006_purchases.sql`, now applied by the
+authorized production release. Further production changes require normal review.
 See [implementation status](return-tracker.md) before deployment. No new environment
 variables or services are required. `npm ci` installs pinned Tesseract.js 7.0.0,
 its matching 7.0.0 core, English language data 1.0.0, and sharp 0.35.5. Keep optional
