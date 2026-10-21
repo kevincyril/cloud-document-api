@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.env
+.env.*
+uploads
+.test-uploads-*
+coverage
+*.pem
+test-document.txt
+downloaded-document.txt

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { authenticate } from "../middleware/auth.middleware";
 import { upload } from "../middleware/upload";
 import { pool } from "../database";
@@ -6,15 +7,25 @@ import { analyzeText } from "../services/text-processing";
 import {
   saveFile,
   deleteFile,
-  getFilePath,
   readTextFile,
+  readFileBuffer,
 } from "../services/storage";
+import { extractPdfText } from "../services/pdf-processing";
+import { FormatError, InvalidPDFException, PasswordException } from "pdf-parse";
+import { uploadLimiter, processingLimiter } from "../middleware/rate-limit.middleware";
+import { validateDocument } from "../middleware/validate-document";
 const router = Router();
+const paginationSchema = z.object({
+  limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().min(1).max(100)).default(50),
+  offset: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().min(0).max(10000)).default(0),
+});
 
 router.post(
   "/upload",
   authenticate,
+  uploadLimiter,
   upload.single("document"),
+  validateDocument,
   async (req, res, next) => {
     if (!req.file) {
       res.status(400).json({
@@ -25,7 +36,7 @@ router.post(
     }
 
     try {
-      const storageKey = await saveFile(req.file.buffer);
+      const storageKey = await saveFile(req.file.buffer, req.file.mimetype);
 
       let document;
 
@@ -50,7 +61,7 @@ router.post(
         try {
           await deleteFile(storageKey);
         } catch (cleanupError) {
-          console.error("Failed to clean up uploaded file:", cleanupError);
+          console.error("Failed to clean up uploaded file");
         }
 
         throw databaseError;
@@ -68,19 +79,27 @@ router.post(
 );
 
 router.get("/", authenticate, async (req, res, next) => {
+  const pagination = paginationSchema.safeParse(req.query);
+  if (!pagination.success) {
+    res.status(400).json({ status: "error", message: "Invalid pagination: limit must be 1-100 and offset 0-10000" });
+    return;
+  }
+  const { limit, offset } = pagination.data;
   try {
     const result = await pool.query(
       `SELECT id, original_name, mime_type, size_bytes,
               status, created_at
        FROM documents
        WHERE user_id = $1
-       ORDER BY created_at DESC`,
-      [req.user!.userId],
+       ORDER BY created_at DESC, id DESC
+       LIMIT $2 OFFSET $3`,
+      [req.user!.userId, limit, offset],
     );
 
     res.status(200).json({
       status: "ok",
       documents: result.rows,
+      pagination: { limit, offset },
     });
   } catch (error) {
     next(error);
@@ -108,7 +127,7 @@ router.get("/:id", authenticate, async (req, res, next) => {
               word_count, character_count, processed_at
        FROM documents
        WHERE id = $1 AND user_id = $2`,
-      [documentId, req.user!.userId]
+      [documentId, req.user!.userId],
     );
 
     if (result.rows.length === 0) {
@@ -144,7 +163,7 @@ router.get("/:id/download", authenticate, async (req, res, next) => {
 
   try {
     const result = await pool.query(
-      `SELECT original_name, storage_key
+      `SELECT original_name, storage_key, mime_type
        FROM documents
        WHERE id = $1 AND user_id = $2`,
       [documentId, req.user!.userId],
@@ -159,20 +178,18 @@ router.get("/:id/download", authenticate, async (req, res, next) => {
     }
 
     const document = result.rows[0];
-    const filePath = getFilePath(document.storage_key);
-
-    res.download(filePath, document.original_name, (error) => {
-      if (error) {
-        next(error);
-      }
-    });
+    const buffer = await readFileBuffer(document.storage_key);
+    res.attachment(document.original_name);
+    res.type(document.mime_type);
+    res.send(buffer);
   } catch (error) {
     next(error);
   }
 });
 
-router.post("/:id/process", authenticate, async (req, res, next) => {
+router.post("/:id/process", authenticate, processingLimiter, async (req, res, next) => {
   const documentId = req.params.id;
+  let claimed = false;
 
   const uuidPattern =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -203,15 +220,50 @@ router.post("/:id/process", authenticate, async (req, res, next) => {
 
     const document = result.rows[0];
 
-    if (document.mime_type !== "text/plain") {
+    if (!["text/plain", "application/pdf"].includes(document.mime_type)) {
       res.status(415).json({
         status: "error",
-        message: "Processing currently supports only text files",
+        message: "Processing supports only text and PDF files",
       });
       return;
     }
 
-    const text = await readTextFile(document.storage_key);
+    // PostgreSQL checks and changes the status in one operation. Only one
+    // request can claim the row, even when multiple API processes are running.
+    const claim = await pool.query(
+      `UPDATE documents
+       SET status = 'processing', extracted_text = NULL,
+           word_count = NULL, character_count = NULL,
+           processed_at = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND user_id = $2 AND status <> 'processing'
+       RETURNING id`,
+      [documentId, req.user!.userId],
+    );
+
+    if (claim.rows.length === 0) {
+      const existing = await pool.query(
+        "SELECT id FROM documents WHERE id = $1 AND user_id = $2",
+        [documentId, req.user!.userId],
+      );
+      res.status(existing.rows.length === 0 ? 404 : 409).json({
+        status: "error",
+        message: existing.rows.length === 0
+          ? "Document not found"
+          : "Document is already processing",
+      });
+      return;
+    }
+    claimed = true;
+
+    let text: string;
+
+    if (document.mime_type === "text/plain") {
+      text = await readTextFile(document.storage_key);
+    } else {
+      const buffer = await readFileBuffer(document.storage_key);
+      text = await extractPdfText(buffer);
+    }
+
     const analysis = analyzeText(text);
 
     const savedResult = await pool.query(
@@ -240,6 +292,7 @@ router.post("/:id/process", authenticate, async (req, res, next) => {
       });
       return;
     }
+    claimed = false;
 
     res.status(200).json({
       status: "ok",
@@ -247,6 +300,33 @@ router.post("/:id/process", authenticate, async (req, res, next) => {
       analysis,
     });
   } catch (error) {
+    if (claimed) {
+      try {
+        await pool.query(
+          `UPDATE documents
+           SET status = 'failed', updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1 AND user_id = $2 AND status = 'processing'`,
+          [documentId, req.user!.userId],
+        );
+      } catch {
+        // Preserve the original error if the database is also unavailable.
+        console.error("Failed to save document processing failure");
+      }
+    }
+
+    if (
+      error instanceof InvalidPDFException ||
+      error instanceof PasswordException ||
+      error instanceof FormatError
+    ) {
+      res.status(422).json({
+        status: "error",
+        message: error instanceof PasswordException
+          ? "Password-protected PDFs are not supported"
+          : "The PDF is invalid or damaged",
+      });
+      return;
+    }
     next(error);
   }
 });

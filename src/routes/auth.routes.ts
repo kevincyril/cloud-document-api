@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { pool } from "../database";
 import jwt from "jsonwebtoken";
+import { loginLimiter, registrationLimiter } from "../middleware/rate-limit.middleware";
 import {
   authenticate,
   authorize,
@@ -13,15 +14,15 @@ const router = Router();
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.string().trim().email().max(255),
-  password: z.string().min(8).max(72),
+  password: z.string().min(8).max(72).refine(value => Buffer.byteLength(value, "utf8") <= 72, "Password must be at most 72 UTF-8 bytes"),
 });
 
 const loginSchema = z.object({
   email: z.string().trim().email().max(255),
-  password: z.string().min(1).max(72),
+  password: z.string().min(1).max(72).refine(value => Buffer.byteLength(value, "utf8") <= 72, "Password must be at most 72 UTF-8 bytes"),
 });
 
-router.post("/register", async (req, res) => {
+router.post("/register", registrationLimiter, async (req, res) => {
   const validation = registerSchema.safeParse(req.body);
 
   if (!validation.success) {
@@ -75,7 +76,7 @@ router.post("/register", async (req, res) => {
       return;
     }
 
-    console.error("Registration error:", error);
+    console.error("Registration database operation failed");
 
     res.status(500).json({
       status: "error",
@@ -84,7 +85,7 @@ router.post("/register", async (req, res) => {
   }
 });
 
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   const validation = loginSchema.safeParse(req.body);
 
   if (!validation.success) {
@@ -159,7 +160,7 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("Login operation failed");
 
     res.status(500).json({
       status: "error",
@@ -190,7 +191,7 @@ router.get("/me", authenticate, async (req, res) => {
       user: result.rows[0],
     });
   } catch (error) {
-    console.error("User profile error:", error);
+    console.error("User profile database operation failed");
 
     res.status(500).json({
       status: "error",

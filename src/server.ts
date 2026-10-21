@@ -1,38 +1,33 @@
-import authRouter from "./routes/auth.routes";
-import express from "express";
-import dotenv from "dotenv";
+import { config, validateServerConfiguration } from "./config";
+import { app } from "./app";
 import { pool } from "./database";
-import documentRouter from "./routes/documents";
 
-dotenv.config();
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(express.json());
-app.use("/auth", authRouter);
-app.use("/documents", documentRouter);
-
-app.get("/health", async (_req, res) => {
-  try {
-    const result = await pool.query("SELECT NOW()");
-
-    res.status(200).json({
-      status: "ok",
-      message: "Cloud Document Processing API is running",
-      database: "connected",
-      databaseTime: result.rows[0].now,
-    });
-  } catch (error) {
-    console.error("Database connection error:", error);
-
-    res.status(503).json({
-      status: "error",
-      message: "Database connection failed",
+async function start(): Promise<void> {
+  validateServerConfiguration();
+  await pool.query("SELECT 1");
+  const server = app.listen(config.PORT, "0.0.0.0", () => {
+    console.log(`Server listening on port ${config.PORT}`);
+  });
+  let stopping = false;
+  function shutdown(): void {
+    if (stopping) return;
+    stopping = true;
+    console.log("Finishing active requests before shutdown");
+    const timeout = setTimeout(() => process.exit(1), 20000);
+    timeout.unref();
+    server.close(() => {
+      void pool.end().then(() => { clearTimeout(timeout); }).catch(() => { process.exitCode = 1; });
     });
   }
-});
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+  server.on("error", () => {
+    console.error("HTTP server failed to start");
+    void pool.end().finally(() => { process.exitCode = 1; });
+  });
+}
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+start().catch(() => {
+  console.error("Startup failed: check environment configuration and database connectivity");
+  void pool.end().finally(() => { process.exitCode = 1; });
 });

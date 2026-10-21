@@ -33,12 +33,13 @@ export function authenticate(
   }
 
   try {
-    const decoded = jwt.verify(token, jwtSecret);
+    const decoded = jwt.verify(token, jwtSecret, { algorithms: ["HS256"] });
 
     if (
       typeof decoded === "string" ||
       typeof decoded.userId !== "string" ||
-      typeof decoded.role !== "string"
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded.userId) ||
+      (decoded.role !== "user" && decoded.role !== "admin")
     ) {
       res.status(401).json({
         status: "error",

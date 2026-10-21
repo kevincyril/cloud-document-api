@@ -1,0 +1,93 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Cloud Document Processing API",
+    "version": "1.0.0",
+    "description": "Register, log in, upload private UTF-8 text or PDF files, and persist extracted text and counts. JWTs expire after one hour. Processing is synchronous. Scanned PDFs require OCR, which is not implemented. All document access is restricted to its owner."
+  },
+  "servers": [{ "url": "/", "description": "Current API host" }],
+  "security": [{ "bearerAuth": [] }],
+  "tags": [{ "name": "Authentication" }, { "name": "Documents" }, { "name": "Service" }],
+  "paths": {
+    "/": {
+      "get": { "tags": ["Service"], "security": [], "summary": "API entry point", "responses": { "200": { "description": "Service name and documentation links" } } }
+    },
+    "/health": {
+      "get": { "tags": ["Service"], "security": [], "summary": "Check API and PostgreSQL connectivity", "responses": { "200": { "description": "Database connected" }, "503": { "$ref": "#/components/responses/Unavailable" } } }
+    },
+    "/openapi.json": {
+      "get": { "tags": ["Service"], "security": [], "summary": "Download this OpenAPI specification", "responses": { "200": { "description": "OpenAPI 3.0.3 JSON" } } }
+    },
+    "/auth/register": {
+      "post": {
+        "tags": ["Authentication"], "security": [], "summary": "Create a regular user account",
+        "description": "5 attempts per hour per connection IP. Passwords must be 8-72 characters and at most 72 UTF-8 bytes. A submitted role is ignored.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name", "email", "password"], "properties": { "name": { "type": "string", "minLength": 2, "maxLength": 100 }, "email": { "type": "string", "format": "email", "maxLength": 255 }, "password": { "type": "string", "format": "password", "minLength": 8, "maxLength": 72 } } } } } },
+        "responses": { "201": { "description": "Account created", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string", "enum": ["success"] }, "message": { "type": "string" }, "user": { "$ref": "#/components/schemas/User" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "409": { "description": "Email already registered" }, "429": { "$ref": "#/components/responses/RateLimited" }, "500": { "$ref": "#/components/responses/InternalError" } }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["Authentication"], "security": [], "summary": "Get a one-hour bearer token",
+        "description": "20 attempts per 15 minutes per connection IP. Email is case-insensitive.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["email", "password"], "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string", "format": "password", "maxLength": 72 } } } } } },
+        "responses": { "200": { "description": "Authenticated", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string", "enum": ["success"] }, "message": { "type": "string" }, "token": { "type": "string", "description": "Keep private; send using Authorization: Bearer <token>" }, "user": { "$ref": "#/components/schemas/User" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "429": { "$ref": "#/components/responses/RateLimited" } }
+      }
+    },
+    "/auth/me": {
+      "get": { "tags": ["Authentication"], "summary": "Get your profile", "responses": { "200": { "description": "Authenticated profile", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" }, "user": { "$ref": "#/components/schemas/User" } } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/auth/admin-test": {
+      "get": { "tags": ["Authentication"], "summary": "Demonstrate role authorization", "description": "Public registration always creates regular users. This route requires an admin role in a verified token.", "responses": { "200": { "description": "Admin authorized" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "description": "Role not allowed" } } }
+    },
+    "/documents/upload": {
+      "post": {
+        "tags": ["Documents"], "summary": "Upload one private document",
+        "description": "20 attempts per 15 minutes per user. Maximum 5 MiB (5,242,880 bytes). One file in the document field; extra fields are rejected. Plain text must be UTF-8; PDFs must begin with %PDF-. Header validation does not guarantee that the PDF can be parsed.",
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["document"], "properties": { "document": { "type": "string", "format": "binary" } } }, "encoding": { "document": { "contentType": "application/pdf, text/plain" } } } } },
+        "responses": { "201": { "description": "Bytes saved and metadata created", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" }, "message": { "type": "string" }, "document": { "$ref": "#/components/schemas/DocumentMetadata" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "413": { "description": "File exceeds 5 MiB" }, "415": { "description": "Unsupported MIME type or invalid content" }, "429": { "$ref": "#/components/responses/RateLimited" }, "503": { "$ref": "#/components/responses/Unavailable" } }
+      }
+    },
+    "/documents": {
+      "get": {
+        "tags": ["Documents"], "summary": "List your documents, newest first",
+        "parameters": [{ "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } }, { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 0 } }],
+        "responses": { "200": { "description": "Owned documents only", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" }, "documents": { "type": "array", "items": { "$ref": "#/components/schemas/DocumentMetadata" } }, "pagination": { "type": "object", "properties": { "limit": { "type": "integer" }, "offset": { "type": "integer" } } } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/documents/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/DocumentId" }],
+      "get": { "tags": ["Documents"], "summary": "Get metadata and persisted analysis", "responses": { "200": { "description": "Owned document", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" }, "document": { "$ref": "#/components/schemas/ProcessedDocument" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/documents/{id}/download": {
+      "parameters": [{ "$ref": "#/components/parameters/DocumentId" }],
+      "get": { "tags": ["Documents"], "summary": "Download your original file", "responses": { "200": { "description": "Original bytes with attachment filename", "content": { "application/pdf": { "schema": { "type": "string", "format": "binary" } }, "text/plain": { "schema": { "type": "string", "format": "binary" } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "503": { "$ref": "#/components/responses/Unavailable" } } }
+    },
+    "/documents/{id}/process": {
+      "parameters": [{ "$ref": "#/components/parameters/DocumentId" }],
+      "post": {
+        "tags": ["Documents"], "summary": "Extract text and save counts synchronously",
+        "description": "20 attempts per 15 minutes per user. Status moves to processing then completed or failed. Concurrent attempts receive 409. Completed or failed documents can be retried; each attempt clears old results. Words are whitespace-delimited; characters are Unicode code points including whitespace. PDF parser page labels are excluded. A crash can leave processing stuck; see recovery instructions.",
+        "responses": { "200": { "description": "Saved completed analysis", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" }, "documentId": { "type": "string", "format": "uuid" }, "analysis": { "type": "object", "properties": { "text": { "type": "string" }, "wordCount": { "type": "integer", "minimum": 0 }, "characterCount": { "type": "integer", "minimum": 0 } } } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "Already processing" }, "415": { "description": "Unsupported processing type" }, "422": { "description": "PDF damaged or password-protected; status saved as failed" }, "429": { "$ref": "#/components/responses/RateLimited" }, "500": { "$ref": "#/components/responses/InternalError" }, "503": { "$ref": "#/components/responses/Unavailable" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": { "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" } },
+    "parameters": { "DocumentId": { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } } },
+    "schemas": {
+      "Error": { "type": "object", "required": ["status", "message"], "properties": { "status": { "type": "string", "enum": ["error"] }, "message": { "type": "string" }, "errors": { "type": "object", "description": "Optional field-validation errors" } } },
+      "User": { "type": "object", "properties": { "id": { "type": "string", "format": "uuid" }, "name": { "type": "string" }, "email": { "type": "string", "format": "email" }, "role": { "type": "string", "enum": ["user", "admin"] }, "created_at": { "type": "string", "format": "date-time" } } },
+      "DocumentMetadata": { "type": "object", "properties": { "id": { "type": "string", "format": "uuid" }, "original_name": { "type": "string" }, "mime_type": { "type": "string", "enum": ["text/plain", "application/pdf"] }, "size_bytes": { "type": "string", "pattern": "^[0-9]+$", "description": "PostgreSQL BIGINT is returned as a string" }, "status": { "type": "string", "enum": ["uploaded", "processing", "completed", "failed"] }, "created_at": { "type": "string", "format": "date-time" } } },
+      "ProcessedDocument": { "allOf": [{ "$ref": "#/components/schemas/DocumentMetadata" }, { "type": "object", "properties": { "extracted_text": { "type": "string", "nullable": true }, "word_count": { "type": "integer", "minimum": 0, "nullable": true }, "character_count": { "type": "integer", "minimum": 0, "nullable": true }, "processed_at": { "type": "string", "format": "date-time", "nullable": true } } }] }
+    },
+    "responses": {
+      "BadRequest": { "description": "Invalid input or malformed JSON", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Unauthorized": { "description": "Missing, invalid, or expired authentication", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NotFound": { "description": "Same response for a missing document and another user's document", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "RateLimited": { "description": "Request allowance exhausted", "headers": { "Retry-After": { "description": "Seconds to wait", "schema": { "type": "integer" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "InternalError": { "description": "Unexpected failure; internal details are hidden", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Unavailable": { "description": "Database or private object storage unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    }
+  }
+}

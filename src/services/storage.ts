@@ -1,34 +1,58 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { mkdir, writeFile, unlink, readFile } from "node:fs/promises";
+import { config } from "../config";
+import { createLocalStorage, createSupabaseStorage, StorageProvider, StorageUnavailableError } from "./storage-provider";
 
-const uploadDirectory = path.resolve("uploads");
+const uploadDirectory = path.resolve(config.UPLOAD_DIR);
+let provider: StorageProvider;
+
+function getProvider(): StorageProvider {
+  if (!provider) {
+    if (config.STORAGE_DRIVER === "supabase") {
+      const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_STORAGE_BUCKET } = process.env;
+      if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_STORAGE_BUCKET) {
+        throw new StorageUnavailableError();
+      }
+      provider = createSupabaseStorage(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_STORAGE_BUCKET);
+    } else {
+      provider = createLocalStorage(uploadDirectory);
+    }
+  }
+  return provider;
+}
+
+function validateStorageKey(key: string): void {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key)) {
+    throw new Error("Invalid storage key");
+  }
+}
 
 export async function saveFile(
-  buffer: Buffer
+  buffer: Buffer,
+  contentType = "application/octet-stream",
 ): Promise<string> {
-  await mkdir(uploadDirectory, { recursive: true });
-
   const storageKey = randomUUID();
-  const filePath = path.join(uploadDirectory, storageKey);
-
-  await writeFile(filePath, buffer, { flag: "wx" });
+  await getProvider().put(storageKey, buffer, contentType);
 
   return storageKey;
 }
 
 export async function deleteFile(storageKey: string): Promise<void> {
-  const filePath = path.join(uploadDirectory, storageKey);
-
-  await unlink(filePath);
+  validateStorageKey(storageKey);
+  await getProvider().remove(storageKey);
 }
 
 export function getFilePath(storageKey: string): string {
+  validateStorageKey(storageKey);
+  if (config.STORAGE_DRIVER !== "local") throw new Error("Cloud objects do not have local paths");
   return path.join(uploadDirectory, storageKey);
 }
 
 export async function readTextFile(storageKey: string): Promise<string> {
-  const filePath = getFilePath(storageKey);
+  return (await readFileBuffer(storageKey)).toString("utf8");
+}
 
-  return readFile(filePath, "utf8");
+export async function readFileBuffer(storageKey: string): Promise<Buffer> {
+  validateStorageKey(storageKey);
+  return getProvider().get(storageKey);
 }
