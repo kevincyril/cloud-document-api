@@ -6,9 +6,10 @@ a responsive purchase dashboard, a synthetic sample flow, and calendar export.
 The implementation was reviewed, committed, and deployed on October 21, 2026
 (application commit `f47722b`, Render deploy `dep-dbchlhks728c7396m230`). GitHub
 Actions passed and migration 006 is applied. Health, dashboard HTML, authentication,
-and database access restrictions are verified. **Live receipt verification remains
-pending:** the private bucket still reports only PDF/text MIME types; JPEG/PNG must
-be added through its settings. There are no automatic email/SMS/app reminders.
+and database access restrictions are verified. The owner updated the bucket to
+accept JPEG/PNG while retaining private access and the 5 MiB cap. A real browser
+check of the complete receipt flow on the public service passed, including
+two-account isolation. There are no automatic email/SMS/app reminders.
 
 ## Architecture and milestones
 
@@ -136,7 +137,7 @@ command applied migration 006 successfully. The table has RLS enabled and no
 anon/authenticated SELECT access. The existing Render configuration is unchanged.
 No new environment variables or services are required. Exact dependencies and
 lockfile changes are committed. The private bucket's JPEG/PNG MIME allowlist update
-is still required to finish live verification; see [deployment notes](deployment.md).
+is verified, and live receipt verification passed; see [deployment notes](deployment.md).
 
 `npm run check` includes deterministic money/date/deadline tests.
 `npm run test:integration` uses the configured database in disposable schemas;

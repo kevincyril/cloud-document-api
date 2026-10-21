@@ -6,9 +6,19 @@ migration 006. `/health` and `/app/` return 200, the receipt dashboard is presen
 and anonymous `/purchases` returns 401. The new table enables RLS and revokes
 anon/authenticated SELECT access. Runtime error checks after rollout found no errors.
 
-**Pending:** the bucket still reports `application/pdf` and `text/plain` only.
-The owner needs to save the JPEG/PNG allowlist below before the live receipt/OCR
-smoke check can run. No live upload success is claimed at this checkpoint.
+The owner updated the bucket MIME allowlist, and a read-only check confirmed PDF,
+text, JPEG, and PNG are accepted while the bucket remains private with its 5 MiB
+limit. A real Edge browser check against the public service passed registration/
+login, synthetic PNG upload, actual browser OCR, manual correction, confirmed
+window calculation, saved dashboard entry, private preview/original download,
+all-day calendar export, 390-pixel layout, and two-account isolation. The second
+account received 404 for the first account's purchase, calendar, receipt metadata,
+and original download. No real customer receipt or existing user record was read.
+
+Two disposable smoke-check accounts, one synthetic receipt original, and one
+purchase remain for trusted maintenance; do not delete existing user data or
+remove storage metadata directly. The local ignored `artifacts/` directory records
+the exact fixture IDs and desktop/mobile screenshots without passwords or tokens.
 
 The purchase API requires migration `006_purchases.sql`, now applied by the
 authorized production release. Further production changes require normal review.
@@ -17,12 +27,10 @@ variables or services are required. `npm ci` installs pinned Tesseract.js 7.0.0,
 its matching 7.0.0 core, English language data 1.0.0, and sharp 0.35.5. Keep optional
 dependencies enabled so sharp's Linux binary is installed on Render/Docker.
 
-Before a separately authorized release, update the existing **private** Supabase
-bucket's allowed MIME types to include `image/jpeg` and `image/png` while retaining
-`application/pdf` and `text/plain` and the 5,242,880-byte limit. Do not make the
-bucket public. The current production bucket was documented as PDF/text-only;
-receipt uploads will fail there until its allowlist and the app are updated.
-No bucket settings have been changed in this local work.
+The existing **private** Supabase bucket's allowed MIME types now include
+`image/jpeg` and `image/png` as well as `application/pdf` and `text/plain`, with
+the 5,242,880-byte limit retained. Keep these settings during future releases;
+do not make the bucket public. The owner saved the bucket change in the Dashboard.
 
 The current Render build command includes `npm run db:migrate`; deployment is
 therefore also a schema mutation and requires explicit review. The existing

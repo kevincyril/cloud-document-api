@@ -6,8 +6,8 @@ shows days remaining, saved originals, and Returned status. Export an all-day
 calendar event; this app does not send emails, SMS, or automatic reminders.
 
 The reviewed implementation is deployed at https://cloud-document-api.onrender.com/app/.
-**Release check pending:** the private Supabase bucket still allows PDF/text only;
-JPEG/PNG uploads need its MIME allowlist updated before live receipt verification.
+The live receipt/OCR flow is verified. The private Supabase bucket accepts PDF,
+text, JPEG, and PNG with the existing 5 MiB limit.
 The existing PDF/text extraction and private search
 remain available under **Private document library & search**. Built with
 TypeScript, Express, PostgreSQL, JWT authentication, Tesseract.js, and private

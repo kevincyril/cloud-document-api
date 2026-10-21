@@ -12,7 +12,7 @@ suggestions are untrusted, bounded input saved separately from confirmed fields.
 `GET /purchases/:id/calendar` downloads an all-day `.ics` for the saved confirmed
 deadline (409 if absent, 404 for a missing/other-owner purchase). It schedules no
 application reminder. Application commit `f47722b` is deployed with migration 006;
-live image uploads still await the private bucket's JPEG/PNG MIME allowlist update.
+the private bucket's JPEG/PNG allowlist and the live upload/OCR flow are verified.
 
 # Try the API in PowerShell
 

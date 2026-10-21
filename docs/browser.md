@@ -3,7 +3,8 @@
 The main experience is now Return Keeper: JPEG/PNG receipt OCR, review, confirmed
 deadlines, private originals, and calendar export. See the [receipt demo and
 verification guide](return-tracker.md). The reviewed implementation is published;
-live JPEG/PNG verification awaits the private bucket's MIME allowlist update.
+live JPEG/PNG upload, real OCR, review/correction, confirmed deadlines, dashboard,
+private download, calendar export, mobile layout, and account isolation are verified.
 The document workflow below remains available in the collapsed secondary library.
 
 Start the existing local database, fill in the ignored `.env` using setup.md,
