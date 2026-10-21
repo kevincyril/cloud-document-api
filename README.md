@@ -15,7 +15,10 @@ Supabase/local storage. See [architecture, correctness, and limitations](docs/re
 
 ## Two-minute recruiter demo
 
-1. Run against an explicitly chosen **local** database with migrations through 006.
+Open the [live website](https://cloud-document-api.onrender.com/app/) and follow
+the [demo walkthrough, screenshots, and portfolio copy](docs/demo.md).
+
+1. Use the live site, or run against an explicitly chosen **local** database with migrations through 006.
 2. Open `/app/`, create an account, and select **Try a sample receipt**.
 3. Watch real browser OCR, review the synthetic receipt, and correct any field.
 4. Choose an explicit deadline or a user-supplied day window. Check the displayed

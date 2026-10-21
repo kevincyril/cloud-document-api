@@ -12,6 +12,7 @@
     "test:integration": "node --test scripts/api.integration.test.cjs scripts/migrations.integration.test.cjs scripts/processing-concurrency.test.cjs scripts/search.integration.test.cjs",
     "test:concurrency": "node --test scripts/processing-concurrency.test.cjs",
     "test:browser": "node --test scripts/browser.test.cjs",
+    "test:firefox": "node --test scripts/firefox-browser.test.cjs",
     "docs:check": "node scripts/validate-docs.cjs",
     "check": "npm run typecheck && npm test && npm run docs:check && npm run build",
     "db:migrate": "node scripts/migrate.cjs",

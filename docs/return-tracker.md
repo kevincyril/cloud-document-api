@@ -175,7 +175,8 @@ deletion, image isolation, image validation, scoped CSP, and calendar export.
   meaningful browser CPU/memory; low-memory/slow/mobile devices may need manual
   entry. The 12 MP cap bounds image work but is not a universal performance promise.
 - A modern WebAssembly/Web Worker browser is required for OCR. Real Edge/Chromium
-  was verified locally. Safari, Firefox, real mobile devices, screen readers, and
+  was verified locally. Chrome and Firefox were subsequently verified as described
+  below. Safari, real mobile devices, screen readers, and
   calendar-client imports have not been independently tested. Manual entry and
   download are available when OCR is unavailable.
 
@@ -252,3 +253,23 @@ manual save → blocked OCR-library failure → manual save. It also retains the
 existing PDF/text extraction/search/source/download, literal HTML-like text,
 session expiry, account isolation, browser refresh, and 390-pixel layout checks.
 No real customer receipt or production data was used.
+
+### Additional browser checkpoint: October 21, 2026
+
+The full Chromium suite also passed in installed Google Chrome. An optional
+`npm run test:firefox` check uses Firefox's documented WebDriver BiDi endpoint
+with an isolated local schema/profile/upload directory. Actual Firefox passed
+sample-image OCR, manual amount correction, explicit deadline confirmation,
+saved purchase, authenticated image response and preview, calendar response,
+390-pixel layout, cancellation/worker-frame cleanup, and second-account isolation.
+It does not claim a native Firefox file-download or external calendar-import test.
+No paid services, browser-driver downloads, or new dependencies were added.
+
+Set `FIREFOX_TEST_BINARY` to a local Firefox executable if it is installed elsewhere;
+the default is the standard Windows path. As with the Chromium suite, override
+all database settings to a disposable local PostgreSQL instance. This optional
+test is not part of the default CI job, which does not install Firefox.
+
+[The portfolio/demo guide](demo.md) includes the public URL, a short script,
+synthetic-data screenshots, and an honest list of hands-on checks still requiring
+the user's own receipts, real phone, Safari, or personal calendar account.

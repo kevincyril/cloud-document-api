@@ -15,10 +15,14 @@ all-day calendar export, 390-pixel layout, and two-account isolation. The second
 account received 404 for the first account's purchase, calendar, receipt metadata,
 and original download. No real customer receipt or existing user record was read.
 
-Two disposable smoke-check accounts, one synthetic receipt original, and one
-purchase remain for trusted maintenance; do not delete existing user data or
-remove storage metadata directly. The local ignored `artifacts/` directory records
-the exact fixture IDs and desktop/mobile screenshots without passwords or tokens.
+The two disposable accounts, one synthetic receipt original, and one purchase from
+this release check were cleaned up on October 21, 2026. The owner removed the exact
+original through Storage; its absence was verified before deleting only the
+matching purchase/document/accounts in a guarded transaction. All recorded fixture
+IDs now return zero remaining rows. Other users and documents were not modified.
+The local ignored `artifacts/` directory retains the fixture IDs and synthetic-data
+screenshots without passwords or tokens. This cleanup does not claim to remove
+unrelated test data from older releases.
 
 The purchase API requires migration `006_purchases.sql`, now applied by the
 authorized production release. Further production changes require normal review.
