@@ -9,3 +9,4 @@ coverage/
 /downloaded-document.txt
 /.test-uploads-*/
 *.pem
+/artifacts/

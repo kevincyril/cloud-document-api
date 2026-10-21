@@ -1,3 +1,18 @@
+# Receipt and purchase API (local implementation)
+
+Authenticated `/purchases` supports create, list, detail, and full replacement
+with revision checks. See the [purchase contract](return-tracker.md) for exact
+money, date, confirmation, and document ownership rules. Migration 006 is required
+on an explicitly chosen local test database. JPEG/PNG originals use the existing
+`POST /documents/upload` endpoint and owner-checked downloads. Valid images are
+decoded server-side, must be single-frame, at most 5 MiB/12 megapixels/8000 pixels
+per side, and must match their declared MIME type. `POST /documents/:id/process`
+continues to process only PDF/text; receipt OCR runs in the browser. Raw OCR and
+suggestions are untrusted, bounded input saved separately from confirmed fields.
+`GET /purchases/:id/calendar` downloads an all-day `.ics` for the saved confirmed
+deadline (409 if absent, 404 for a missing/other-owner purchase). It schedules no
+application reminder. The public deployment has not been updated by this work.
+
 # Try the API in PowerShell
 
 Private search and source-unit retrieval are deployed. For local development,

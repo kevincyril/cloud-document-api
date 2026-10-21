@@ -3,8 +3,12 @@ const $ = id => document.getElementById(id);
 let token = '', generation = 0, registration = false, offset = 0, selected = null, busy = false, expiryTimer, pollTimer;
 const limit = 20;
 let searchQuery = '', searchOffset = 0, searchHasMore = false;
-function notice(message = '', error = false) { $('notice').textContent = message; $('notice').classList.toggle('error', error); }
+function notice(message = '', error = false) {
+  $('notice').textContent = message; $('notice').classList.toggle('error', error);
+  if (error && message) $('notice').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 function signOut(message = 'Signed out.') {
+  window.ReceiptTracker?.reset();
   generation++; token = ''; selected = null; clearTimeout(expiryTimer); clearTimeout(pollTimer);
   $('workspace').hidden = true; $('auth').hidden = false; $('logout').hidden = true;
   $('documents').replaceChildren(); $('text').textContent = ''; $('result').hidden = true; $('empty').hidden = false;
@@ -23,7 +27,7 @@ async function request(path, options = {}, binary = false) {
   const body = await response.json().catch(() => ({}));
   if (current !== generation) throw new Error('Session changed. Please try again.');
   if (!response.ok) {
-    const fields = Object.values(body.errors || {}).flat().join(' ');
+    const fields = [...Object.values(body.errors || {}).flat(), ...(body.issues || []).slice(0, 10).map(issue => `${issue.path?.join('.') || 'Input'}: ${issue.message}`)].join(' ');
     throw new Error(response.status === 429 ? 'Too many requests. Please wait a minute before trying again.' : `${body.message || `Request failed (${response.status}).`}${fields ? ' ' + fields : ''}`);
   }
   return body;
@@ -31,15 +35,16 @@ async function request(path, options = {}, binary = false) {
 async function action(label, work) {
   if (busy) return;
   busy = true; const current = generation;
-  document.querySelectorAll('button').forEach(b => { if (b.id !== 'logout') b.disabled = true; });
+  document.querySelectorAll('button').forEach(b => { if (!['logout', 'ocr-cancel'].includes(b.id)) b.disabled = true; });
   $('workspace').setAttribute('aria-busy', 'true'); notice(label);
   try { await work(); } catch (error) { if (current === generation || !token) notice(error.message, true); }
   finally { busy = false; document.querySelectorAll('button').forEach(b => b.disabled = false); $('workspace').removeAttribute('aria-busy'); updateControls(); }
 }
 function updateControls() {
+  window.ReceiptTracker?.sync();
   $('previous').disabled = busy || offset === 0;
   $('next').disabled = busy || !$('documents').dataset.hasNext || offset >= 10000;
-  $('process').disabled = busy || !selected || selected.status === 'processing';
+  $('process').disabled = busy || !selected || selected.status === 'processing' || !['application/pdf', 'text/plain'].includes(selected.mime_type);
   $('search-previous').disabled = busy || searchOffset === 0;
   $('search-next').disabled = busy || !searchHasMore;
 }
@@ -71,7 +76,12 @@ async function select(id, unitIndex = null) {
     $('all-text').hidden = false;
   }
   $('process').textContent = selected.status === 'processing' ? 'Processing…' : selected.status === 'failed' ? 'Retry extraction' : selected.status === 'completed' ? 'Extract again' : 'Extract text';
-  $('processing-help').textContent = selected.status === 'processing' ? 'Processing is running. Status refreshes every 5 seconds. An interrupted server may need operator recovery.' : selected.status === 'failed' ? 'Extraction failed. Retry with a valid, unencrypted PDF or UTF-8 text file.' : selected.status === 'completed' && !selected.extracted_text?.trim() ? 'No text found. Image-only PDFs need OCR, which this app does not provide.' : 'Counts include extracted text only. No OCR or summarization is performed.';
+  $('processing-help').textContent = selected.status === 'processing' ? 'Processing is running. Status refreshes every 5 seconds. An interrupted server may need operator recovery.' : selected.status === 'failed' ? 'Extraction failed. Retry with a valid, unencrypted PDF or UTF-8 text file.' : selected.status === 'completed' && !selected.extracted_text?.trim() ? 'No text found. Scanned PDF OCR is not supported. For receipt OCR, upload a JPEG/PNG through the return desk.' : 'Counts include PDF/text extraction only. No AI summarization is performed.';
+  if (['image/jpeg', 'image/png'].includes(selected.mime_type)) {
+    $('text-heading').textContent = 'Receipt image original';
+    $('text').textContent = 'Use Download original to inspect this image. Receipt OCR and confirmed purchase details are handled in the return desk above.';
+    $('processing-help').textContent = 'Server extraction supports PDF/text. JPEG/PNG receipt OCR runs in your browser through the return desk.';
+  }
   document.querySelectorAll('.doc').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === selected.id)));
   updateControls();
   if (selected.status === 'processing') schedulePoll(id);
@@ -101,7 +111,7 @@ $('auth-form').onsubmit = event => {
     $('auth').hidden = true; $('workspace').hidden = false; $('logout').hidden = false; $('greeting').textContent = `WELCOME, ${body.user.name}`;
     const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
     expiryTimer = setTimeout(() => signOut('Your session expired. Sign in again.'), Math.max(0, payload.exp * 1000 - Date.now()));
-    await list(); notice('Signed in. Your documents are ready.');
+    await list(); await window.ReceiptTracker?.onLogin(); notice('Signed in. Your return desk is ready.');
   });
 };
 $('logout').onclick = () => signOut();

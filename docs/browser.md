@@ -1,13 +1,18 @@
 # Browser application: local review
 
+The main experience is now Return Keeper: JPEG/PNG receipt OCR, review, confirmed
+deadlines, private originals, and calendar export. See the [receipt demo and
+verification guide](return-tracker.md). This local work is not yet published.
+The document workflow below remains available in the collapsed secondary library.
+
 Start the existing local database, fill in the ignored `.env` using setup.md,
-run `npm run db:migrate` to include migration 005 on that local database, then
+verify it is local and run `npm run db:migrate` through migration 006, then
 `npm run dev`.
 Open http://localhost:3000/app/. The interface calls the local backend at the
 same origin. It does not call the production API from localhost.
 
-No new packages or paid services are needed. Migration 005 must be applied
-to the local database before using this version. The existing
+Pinned open-source OCR/image packages are installed by `npm ci`; no paid services
+are needed. Migration 006 must be applied to the local database. The existing
 `/`, `/health`, `/openapi.json`, `/auth`, and `/documents` API behavior is retained.
 `Dockerfile` includes public assets; the existing Node build reads them directly
 from `public/`, both in development and beside compiled `dist/`.
@@ -31,11 +36,12 @@ from `public/`, both in development and beside compiled `dist/`.
 7. Check keyboard navigation, narrow screens, visible focus, and announced status
    messages. Text and filenames are rendered literally, including HTML-like text.
 
-Activity messages indicate upload/extraction requests, not percentage progress.
+Document activity messages indicate upload/extraction requests, not percentage progress.
 Selecting a stored `processing` document polls its status every five seconds.
 If a request is interrupted, refresh documents before retrying because the server
 may have completed it. Failed extraction offers retry; image-only PDFs may finish
-with empty text because OCR is not supported. No summarization is performed.
+with empty text because PDF OCR is not supported. Receipt JPEG/PNG OCR has its own
+progress display, cancellation, and manual fallback. No summarization is performed.
 
 Secrets remain in server environment settings. Sign-out discards the browser's
 token but cannot revoke a JWT already copied elsewhere. The current app has no

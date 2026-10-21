@@ -30,7 +30,7 @@ test('JSON error responses for parser, upload, and unexpected failures', async t
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'x'.repeat(110000) }),
     }, 413, 'Request body is too large'));
     for (const [name, field, type, bytes, status, message] of [
-      ['unsupported file type', 'document', 'image/png', 8, 415, 'Only PDF and text files are allowed'],
+      ['unsupported file type', 'document', 'image/gif', 8, 415, 'Only PDF, UTF-8 text, JPEG, and PNG files are allowed'],
       ['oversized file', 'document', 'text/plain', 5 * 1024 * 1024 + 1, 413, 'Document must be 5 MB or smaller'],
       ['wrong multipart field', 'file', 'text/plain', 8, 400, 'Invalid file upload; use a single file in the document field'],
     ]) {

@@ -47,3 +47,10 @@ export const searchLimiter = rateLimit({
   limit: 60,
   keyGenerator: (req) => req.user!.userId,
 });
+
+export const purchaseWriteLimiter = rateLimit({
+  ...commonOptions,
+  windowMs: 15 * minute,
+  limit: 60,
+  keyGenerator: (req) => req.user!.userId,
+});

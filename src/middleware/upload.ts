@@ -1,10 +1,10 @@
 import multer from "multer";
 
-const allowedMimeTypes = ["application/pdf", "text/plain"];
+const allowedMimeTypes = ["application/pdf", "text/plain", "image/jpeg", "image/png"];
 
 export class UnsupportedFileTypeError extends Error {
   constructor() {
-    super("Only PDF and text files are allowed");
+    super("Only PDF, UTF-8 text, JPEG, and PNG files are allowed");
   }
 }
 

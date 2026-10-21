@@ -30,7 +30,7 @@ test('fresh schema migrations and complete API behavior', { timeout: 45000 }, as
     await migrate(pool, { log: () => {} });
     await migrate(pool, { log: () => {} });
     const history = await pool.query('SELECT name FROM schema_migrations');
-    assert.equal(history.rowCount, 5);
+    assert.equal(history.rowCount, 6);
     const { app } = require(compiled ? '../dist/app.js' : '../src/app.ts');
     server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.once('listening', resolve));
@@ -102,6 +102,68 @@ test('fresh schema migrations and complete API behavior', { timeout: 45000 }, as
       assert.equal(download.status, 200);
       assert.match(download.headers.get('content-disposition'), /attachment/);
       assert.equal(await download.text(), text);
+    });
+    await t.test('purchases enforce account isolation, document ownership, confirmation, and revisions', async () => {
+      const input = { merchant: 'Synthetic shop', purchaseDate: '2024-02-28', amount: '0.29', currency: 'USD',
+        receiptDocumentId: textId, rawOcrText: 'TOTAL 029', suggestions: { amount: '029' },
+        deadline: { source: 'window', date: '2024-03-01', days: 2, purchaseDayCounts: false, confirmed: true } };
+      assert.equal((await request('/purchases', { method: 'POST', json: input })).status, 401);
+      const created = await request('/purchases', { method: 'POST', token: users[0].token, json: input });
+      assert.equal(created.status, 201);
+      const saved = created.body.purchase;
+      assert.equal(saved.amount_minor, '29');
+      assert.equal(saved.purchase_date, '2024-02-28');
+      assert.equal(saved.deadline_date, '2024-03-01');
+      assert.equal(saved.suggestions.amount, '029');
+      const route = `/purchases/${saved.id}`;
+      assert.equal((await request(route, { token: users[1].token })).status, 404);
+      assert.deepEqual((await request('/purchases', { token: users[1].token })).body.purchases, []);
+      assert.equal((await request(route, { method: 'PUT', token: users[1].token, json: { ...input, receiptDocumentId: null, revision: 1 } })).status, 404);
+      for (const key of ['receiptDocumentId', 'policyDocumentId']) {
+        const denied = await request('/purchases', { method: 'POST', token: users[1].token, json: { ...input, receiptDocumentId: null, [key]: textId } });
+        assert.equal(denied.status, 400);
+      }
+      // Database protection remains effective if an API ownership check regresses.
+      await assert.rejects(pool.query('UPDATE purchases SET user_id = $1 WHERE id = $2', [users[1].id, saved.id]), { code: '23503' });
+      await assert.rejects(pool.query('DELETE FROM documents WHERE id = $1', [textId]), { code: '23001' });
+      const changedDate = { ...input, purchaseDate: '2024-02-29', revision: 1 };
+      assert.equal((await request(route, { method: 'PUT', token: users[0].token, json: changedDate })).status, 400);
+      assert.equal((await request(route, { token: users[0].token })).body.purchase.deadline_date, '2024-03-01');
+      const corrected = { ...changedDate, deadline: { ...input.deadline, date: '2024-03-02' }, returned: true };
+      const updated = await request(route, { method: 'PUT', token: users[0].token, json: corrected });
+      assert.equal(updated.status, 200);
+      assert.equal(updated.body.purchase.revision, 2);
+      assert.equal(updated.body.purchase.deadline_date, '2024-03-02');
+      assert.equal((await request(route, { method: 'PUT', token: users[0].token, json: corrected })).status, 409);
+      assert.equal((await request('/purchases?returned=false', { token: users[0].token })).body.purchases.length, 0);
+      assert.equal((await request('/purchases?returned=true', { token: users[0].token })).body.purchases.length, 1);
+      const manual = await request('/purchases', { method: 'POST', token: users[0].token,
+        json: { merchant: 'Manual entry after failed OCR', purchaseDate: null, amount: null, currency: null, deadline: { source: 'none' } } });
+      assert.equal(manual.status, 201);
+      assert.equal(manual.body.purchase.deadline_confirmed_at, null);
+      const calendarResponse = await fetch(`${base}${route}/calendar`, { headers: { Authorization: `Bearer ${users[0].token}` } });
+      assert.equal(calendarResponse.status, 200);
+      assert.match(calendarResponse.headers.get('content-type'), /text\/calendar/);
+      assert.match(calendarResponse.headers.get('cache-control'), /no-store/);
+      assert.match(await calendarResponse.text(), /DTSTART;VALUE=DATE:20240302/);
+      assert.equal((await request(`${route}/calendar`, { token: users[1].token })).status, 404);
+      assert.equal((await request(`/purchases/${manual.body.purchase.id}/calendar`, { token: users[0].token })).status, 409);
+      const sample = await fetch(base + '/app/samples/maple-goods.png');
+      assert.equal(sample.status, 200);
+      const sampleBytes = Buffer.from(await sample.arrayBuffer());
+      const image = await upload(sampleBytes, 'image/png', 'synthetic-sample.png');
+      assert.equal(image.status, 201);
+      const imageId = image.body.document.id;
+      assert.equal((await request(`/documents/${imageId}`, { token: users[1].token })).status, 404);
+      assert.equal((await request(`/documents/${imageId}/download`, { token: users[1].token })).status, 404);
+      const original = await fetch(`${base}/documents/${imageId}/download`, { headers: { Authorization: `Bearer ${users[0].token}` } });
+      assert.deepEqual(Buffer.from(await original.arrayBuffer()), sampleBytes);
+      assert.equal((await request(`/documents/${imageId}/process`, { method: 'POST', token: users[0].token })).status, 415);
+      const pageCsp = (await fetch(base + '/app/')).headers.get('content-security-policy');
+      assert.ok(!pageCsp.includes('wasm-unsafe-eval'));
+      const workerCsp = (await fetch(base + '/app/ocr/worker.min.js')).headers.get('content-security-policy');
+      assert.ok(workerCsp.includes('wasm-unsafe-eval'));
+      assert.equal((await fetch(base + '/app/ocr/package.json')).status, 404);
     });
     await t.test('PDF extraction round trip and damaged PDF failure', async () => {
       const uploaded = await upload(createPdf(), 'application/pdf', 'fixture.pdf');

@@ -6,12 +6,20 @@ import { pool } from "./database";
 import authRouter from "./routes/auth.routes";
 import documentRouter from "./routes/documents";
 import searchRouter from "./routes/search";
+import purchaseRouter from "./routes/purchases";
 import { errorHandler } from "./middleware/error.middleware";
 
 export const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", config.TRUST_PROXY_HOPS === 0 ? false : config.TRUST_PROXY_HOPS);
 app.use(helmet());
+// The main UI needs blob images for authenticated receipt previews. Only the
+// OCR frame and its dedicated worker may compile WebAssembly (never JS eval).
+app.use("/app", helmet.contentSecurityPolicy({ directives: { imgSrc: ["'self'", "data:", "blob:"] } }));
+app.use(["/app/ocr-frame.html", "/app/ocr/worker.min.js"], helmet.contentSecurityPolicy({ directives: {
+  scriptSrc: ["'self'", "'wasm-unsafe-eval'"], workerSrc: ["'self'"], connectSrc: ["'self'"],
+  imgSrc: ["'self'", "blob:", "data:"], frameAncestors: ["'self'"],
+} }));
 app.use(express.json({ limit: "100kb" }));
 app.use((_req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
@@ -20,6 +28,19 @@ app.use((_req, res, next) => {
 app.use("/auth", authRouter);
 app.use("/documents", documentRouter);
 app.use("/search", searchRouter);
+app.use("/purchases", purchaseRouter);
+// Explicit public asset paths; never expose arbitrary node_modules files.
+app.get("/app/ocr/:asset", (req, res, next) => {
+  const asset = req.params.asset;
+  const root = path.resolve(__dirname, "../node_modules");
+  if (asset === "tesseract.min.js" || asset === "worker.min.js") {
+    res.sendFile(path.join(root, "tesseract.js/dist", asset));
+  } else if (asset === "eng.traineddata.gz") {
+    res.sendFile(path.join(root, "@tesseract.js-data/eng/4.0.0_best_int", asset));
+  } else if (/^tesseract-core(?:-(?:simd|relaxedsimd))?(?:-lstm)?\.wasm(?:\.js)?$/.test(asset)) {
+    res.sendFile(path.join(root, "tesseract.js-core", asset));
+  } else next();
+});
 app.use("/app", express.static(path.resolve(__dirname, "../public"), { etag: false, maxAge: 0 }));
 app.get("/", (_req, res) => {
   res.json({ name: "Cloud Document Processing API", documentation: "/openapi.json", health: "/health" });

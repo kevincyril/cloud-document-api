@@ -1,3 +1,28 @@
+# Return tracker migration status
+
+The purchase API requires migration `006_purchases.sql`. This is local work only;
+production application and schema changes require separate review and authorization.
+See [implementation status](return-tracker.md) before deployment. No new environment
+variables or services are required. `npm ci` installs pinned Tesseract.js 7.0.0,
+its matching 7.0.0 core, English language data 1.0.0, and sharp 0.35.5. Keep optional
+dependencies enabled so sharp's Linux binary is installed on Render/Docker.
+
+Before a separately authorized release, update the existing **private** Supabase
+bucket's allowed MIME types to include `image/jpeg` and `image/png` while retaining
+`application/pdf` and `text/plain` and the 5,242,880-byte limit. Do not make the
+bucket public. The current production bucket was documented as PDF/text-only;
+receipt uploads will fail there until its allowlist and the app are updated.
+No bucket settings have been changed in this local work.
+
+The current Render build command includes `npm run db:migrate`; deployment is
+therefore also a schema mutation and requires explicit review. The existing
+Dockerfile installs production dependencies and copies `public/`, including the
+two bundled synthetic receipt assets; no CDN or third-party model download is
+needed at runtime. Keep `/app/ocr/*` and same-origin frames/workers reachable.
+WebAssembly compilation permission is scoped to `/app/ocr-frame.html` and the
+OCR worker script; don't add global `unsafe-eval`. Receipt downloads remain
+authenticated and `no-store`. See the receipt guide for transfer/resource costs.
+
 # A $0 portfolio deployment: Render + Supabase
 
 The API is deployed at https://cloud-document-api.onrender.com using Render Free

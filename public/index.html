@@ -2,20 +2,60 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Document Studio</title><link rel="stylesheet" href="/app/style.css">
+  <title>Return Keeper — Receipts & return deadlines</title><link rel="stylesheet" href="/app/style.css">
+  <script src="/app/receipt-utils.js" defer></script>
   <script src="/app/app.js" defer></script>
+  <script src="/app/receipts.js" defer></script>
 </head>
 <body>
-  <header><a class="brand" href="/app/">▤ <span>Document Studio</span></a><span class="tag">Your private document workspace</span><button id="logout" hidden>Sign out</button></header>
+  <header><a class="brand" href="/app/"><span class="brand-mark" aria-hidden="true">&#8617;</span><span>Return Keeper</span></a><span class="tag">Receipts together. Deadlines in sight.</span><button id="logout" hidden>Sign out</button></header>
   <main>
-    <section class="intro"><p class="eyebrow">UPLOAD · EXTRACT · UNDERSTAND</p><h1>A little clarity.<br>For every document.</h1><p>Extract text from PDFs and text files. Keep the original, explore the words, and see the numbers.</p></section>
+    <section class="intro"><p class="eyebrow">MAKE ROOM FOR SECOND THOUGHTS</p><h1>Keep the receipt.<br>Keep your options.</h1><p>A private place for purchases and the dates that matter. Read a receipt, check the details, and set a return deadline you can trust.</p></section>
     <p id="notice" role="status" aria-live="polite"></p>
+    <p id="sample-intro">A two-minute demo: sign in, try a synthetic receipt, review the suggestions, then confirm a deadline. <button id="sample-start">Try a sample receipt</button></p>
     <section id="auth" class="card auth"><div><p class="eyebrow">WELCOME TO YOUR WORKSPACE</p><h2 id="auth-title">Sign in</h2><p>Documents are private to your account.</p></div>
       <form id="auth-form" method="post" action="/auth/login"><label id="name-label" hidden>Name<input id="name" name="name" minlength="2" maxlength="100" autocomplete="name" disabled></label><label>Email<input id="email" name="email" type="email" maxlength="255" autocomplete="username" required></label><label>Password<input id="password" name="password" type="password" maxlength="72" autocomplete="current-password" required></label><p class="muted" id="password-help">Your session lasts up to one hour. Refreshing signs you out.</p><button class="primary" id="auth-submit">Sign in</button><button type="button" class="link" id="auth-toggle">New here? Create an account</button></form>
     </section>
     <section id="workspace" hidden>
+      <section id="tracker" aria-label="Return deadline tracker">
+        <div class="workspace-heading"><div><p class="eyebrow">A LITTLE MORE TIME, A LOT LESS WORRY</p><h2>Your return desk</h2></div><button id="purchase-refresh">Refresh purchases</button></div>
+        <div class="tracker-summary" aria-label="Purchases on this page"><div><strong id="count-open">0</strong><span>Active purchases</span></div><div><strong id="count-soon">0</strong><span>Due within 7 days</span></div><div><strong id="count-returned">0</strong><span>Returned</span></div></div>
+        <section class="card receipt-upload"><div><p class="eyebrow">01 / KEEP THE RECEIPT</p><h3>One receipt. One less thing to remember.</h3><p>Upload a clear JPEG or PNG. Read its text in your browser, review the details, and set your own return deadline.</p><p class="muted">5 MiB · 12 megapixels · 8000 pixels per side. Printed English receipts work best. OCR can make mistakes.</p></div>
+          <form id="receipt-upload-form"><label>Receipt image<input id="receipt-file" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" required></label><button id="receipt-upload" class="primary">Upload & read receipt</button></form>
+          <div class="actions"><button id="sample-receipt">Try a sample receipt</button><button id="manual-purchase">Enter details manually</button></div>
+        </section>
+        <section id="purchase-editor" class="card" hidden aria-labelledby="editor-title">
+          <div class="workspace-heading"><div><p class="eyebrow">02 / REVIEW & CONFIRM</p><h2 id="editor-title" tabindex="-1">Review your purchase</h2></div><button id="editor-close" type="button">Close</button></div>
+          <div id="ocr-progress" hidden role="status" aria-live="polite"><p id="ocr-status">Preparing OCR…</p><progress id="ocr-meter" max="1"></progress><button id="ocr-cancel" type="button">Cancel OCR & enter manually</button></div>
+          <p id="receipt-retained" class="muted"></p>
+          <div class="editor-grid"><aside class="receipt-pane"><p class="eyebrow">ORIGINAL RECEIPT</p><img id="receipt-preview" alt="Original receipt for this purchase" hidden><p id="receipt-preview-help">You can save a purchase without a receipt.</p><div class="actions"><button id="receipt-download" type="button" hidden>Download original</button><button id="receipt-unlink" type="button" hidden>Unlink receipt</button></div><details id="ocr-review"><summary>OCR text & original suggestions</summary><p class="muted">Unverified machine output. Confirmed fields are separate.</p><pre id="raw-ocr" tabindex="0"></pre><pre id="ocr-suggestions" tabindex="0"></pre></details></aside>
+            <form id="purchase-form"><fieldset id="purchase-fields"><legend class="visually-hidden">Purchase details</legend>
+              <p id="review-warnings" class="review-note" role="status"></p>
+              <label>Merchant / store<input id="purchase-merchant" maxlength="160" required autocomplete="organization"></label>
+              <div class="form-row"><label>Purchase date<input id="purchase-date" type="date" min="1900-01-01" max="9999-12-31" aria-describedby="purchase-date-help"></label><label>Short description<input id="purchase-description" maxlength="500" placeholder="Optional, e.g. canvas tote"></label></div><p class="muted" id="purchase-date-help">Check ambiguous dates on the receipt. Leave unknown dates blank.</p>
+              <div class="form-row"><label>Total<input id="purchase-amount" inputmode="decimal" maxlength="20" placeholder="e.g. 34.56"></label><label>Currency<select id="purchase-currency"><option value="">Unknown / no total</option><option>USD</option><option>CAD</option><option>EUR</option><option>GBP</option><option>AUD</option><option>JPY</option><option>KWD</option></select></label></div>
+              <div class="deadline-box"><h3>Your return deadline</h3><p class="muted">We don't look up store policies. Enter a date or window from a policy you have checked.</p>
+                <label>Set deadline using<select id="deadline-source"><option value="none">No deadline yet</option><option value="manual">An explicit last-return date</option><option value="window">A return window in days</option></select></label>
+                <div id="window-fields" class="form-row" hidden><label>Return window (days)<input id="return-days" type="number" min="1" max="3650" step="1"></label><label>Does purchase day count?<select id="purchase-day-counts"><option value="false">No — add the full window</option><option value="true">Yes — purchase day is day 1</option></select></label></div>
+                <label id="deadline-date-label" hidden>Last-return date<input id="deadline-date" type="date" min="1900-01-01" max="9999-12-31"></label>
+                <p id="deadline-calculation" class="calculation" aria-live="polite"></p><button id="deadline-override" type="button" hidden>Edit calculated date</button>
+                <label id="deadline-confirm-label" class="check-label" hidden><input id="deadline-confirm" type="checkbox">I checked the calculation/date and confirm this deadline.</label>
+                <p class="muted">A receipt doesn't guarantee eligibility. Check policy conditions, packaging, and exclusions.</p>
+              </div>
+              <label>Policy notes<textarea id="policy-notes" maxlength="2000" rows="3" placeholder="Optional conditions or where you found the policy"></textarea></label>
+              <label>Private policy document (optional)<select id="policy-document"><option value="">No attachment</option></select></label><label>Or attach a new policy document<input id="policy-file" type="file" accept=".pdf,.txt,.jpg,.jpeg,.png,application/pdf,text/plain,image/jpeg,image/png"></label><p id="policy-help" class="muted">PDF/text can be extracted and searched in the document library. Policy interpretation is manual.</p>
+              <label class="check-label"><input id="purchase-returned" type="checkbox">I've returned this purchase</label>
+              <div class="actions"><button id="purchase-save" class="primary">Save purchase</button><button id="purchase-calendar" type="button" hidden>Add to calendar</button><button id="policy-download" type="button" hidden>Download policy</button></div>
+              <p class="muted">Calendar export creates an all-day event. This app does not schedule emails or notifications.</p>
+            </fieldset></form>
+          </div>
+        </section>
+        <div class="workspace-heading"><div><p class="eyebrow">03 / KEEP AN EYE ON THE DATE</p><h2>Purchases, in order</h2><p id="purchase-list-status" role="status" aria-live="polite"></p></div><div class="filters"><label>Status<select id="purchase-filter"><option value="all">All purchases</option><option value="active">Active</option><option value="due_soon">Due within 7 days</option><option value="deadline_passed">Deadline passed</option><option value="no_deadline">No deadline</option><option value="returned">Returned</option></select></label><label>Sort<select id="purchase-sort"><option value="deadline">Deadline: soonest first</option><option value="newest">Newest purchases first</option><option value="merchant">Merchant A–Z</option></select></label></div></div>
+        <div id="purchase-list" class="purchase-grid"></div><nav aria-label="Purchase pages"><button id="purchase-previous">Previous purchases</button><span id="purchase-page">Page 1</span><button id="purchase-next">Next purchases</button></nav><p class="muted">Filters, counts, and sorting apply to this page of up to 50 purchases. No totals are combined across currencies.</p>
+      </section>
+      <details id="document-workspace"><summary>Private document library & search</summary>
       <div class="workspace-heading"><div><p class="eyebrow" id="greeting"></p><h2>Your documents</h2></div><button id="refresh">Refresh documents</button></div>
-      <form id="upload-form" class="card upload" method="post" action="/documents/upload" enctype="multipart/form-data"><div><h3>Add a document</h3><p>PDF or UTF-8 text · Maximum 5 MiB</p><p class="muted">Text extraction and counts. Scanned images need OCR, which is not supported. Use nonsensitive demo files.</p></div><label class="file-label">Choose a PDF or text file<input id="file" type="file" accept=".pdf,.txt,application/pdf,text/plain" required></label><button class="primary" id="upload-submit">Upload document</button></form>
+      <form id="upload-form" class="card upload" method="post" action="/documents/upload" enctype="multipart/form-data"><div><h3>Add a document</h3><p>PDF or UTF-8 text · Maximum 5 MiB</p><p class="muted">PDF/text extraction and search. For JPEG/PNG receipt OCR, use the return desk above. Scanned PDFs are not supported by OCR.</p></div><label class="file-label">Choose a PDF or text file<input id="file" type="file" accept=".pdf,.txt,application/pdf,text/plain" required></label><button class="primary" id="upload-submit">Upload document</button></form>
       <section class="card search" aria-label="Search your documents">
         <p class="eyebrow">FIND IT IN YOUR FILES</p><h3>Search your documents</h3>
         <form id="search-form" role="search"><label>Search extracted text<input id="search-query" type="search" maxlength="200" placeholder="Try a topic or a few words" required aria-describedby="search-help"></label><button class="primary" id="search-submit">Search</button><button type="button" id="search-clear">Clear</button></form>
@@ -25,7 +65,8 @@
       </section>
       <div class="columns"><section class="card library" aria-label="Document list"><div id="documents"></div><nav aria-label="Document pages"><button id="previous">Previous</button><span id="page"></span><button id="next">Next</button></nav></section>
       <section class="card detail" aria-label="Selected document"><div id="empty"><span class="paper">▤</span><h3>Room for your next idea</h3><p>Upload a document or select one from your library to explore its text and counts.</p></div><div id="result" hidden><span id="status" class="badge"></span><h2 id="document-name"></h2><p id="document-info" class="muted"></p><div class="actions"><button id="process" class="primary">Extract text</button><button id="download">Download original</button></div><div class="counts"><div><strong id="words">—</strong><span>Words</span></div><div><strong id="characters">—</strong><span>Characters</span></div></div><div class="source-heading"><h3 id="text-heading">Extracted text</h3><button id="all-text" hidden>Show all text</button></div><pre id="text" tabindex="0"></pre><p id="processing-help" class="muted"></p></div></section></div>
+      </details>
     </section>
-    <footer>Private by account. Originals preserved. <a href="/openapi.json">API schema</a></footer>
+    <footer>Private by account. Originals preserved. No automatic reminders. <a href="/openapi.json">API schema</a></footer>
   </main>
 </body></html>

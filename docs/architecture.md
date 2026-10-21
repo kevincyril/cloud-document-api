@@ -1,11 +1,17 @@
 # Explaining the project, one section at a time
 
+The current local implementation extends this document workspace into Return
+Keeper. [The receipt architecture guide](return-tracker.md) covers browser OCR,
+image validation, purchase data, deadline confirmation, and calendar export.
+The sections below describe the preserved document subsystem and its earlier
+deployment; receipt features have not been deployed by this work.
+
 ## 1. What it does
 
 “I built a document application that privately stores PDF and UTF-8 text files,
 extracts their text, and persists word and character counts. I deployed the API
 on Render Free with Supabase PostgreSQL and private object storage. The browser
-interface is served publicly by the same Express service at `/app/`.” It does not perform OCR or summarization.
+interface is served publicly by the same Express service at `/app/`.” The preserved PDF/text processing path does not perform OCR or AI summarization; the return desk adds browser OCR for JPEG/PNG receipts.
 
 ## 2. Entry points and browser
 

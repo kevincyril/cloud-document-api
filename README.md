@@ -1,8 +1,27 @@
-# Cloud Document Processing API
+# Return Keeper — private receipts & return deadlines
 
-A Node.js/TypeScript API for private document uploads, PDF/text extraction, and
-saved word/character counts, and private full-text search. Built with Express, PostgreSQL, JWT authentication,
-and a storage adapter supporting local development or private Supabase objects.
+Upload a JPEG/PNG receipt, run free English OCR in your browser, review and
+correct the suggestions, and confirm your return deadline. A responsive dashboard
+shows days remaining, saved originals, and Returned status. Export an all-day
+calendar event; this app does not send emails, SMS, or automatic reminders.
+
+This is a local implementation awaiting review; it has not been published to the
+existing Render service. The existing PDF/text extraction and private search
+remain available under **Private document library & search**. Built with
+TypeScript, Express, PostgreSQL, JWT authentication, Tesseract.js, and private
+Supabase/local storage. See [architecture, correctness, and limitations](docs/return-tracker.md).
+
+## Two-minute recruiter demo
+
+1. Run against an explicitly chosen **local** database with migrations through 006.
+2. Open `/app/`, create an account, and select **Try a sample receipt**.
+3. Watch real browser OCR, review the synthetic receipt, and correct any field.
+4. Choose an explicit deadline or a user-supplied day window. Check the displayed
+   calculation, then confirm and save.
+5. Review the dashboard, download the private original, and use **Add to calendar**.
+
+The samples contain no real personal/payment information. OCR can make mistakes;
+ambiguous fields are left blank. Merchant names never imply a return policy.
 
 ## Run locally
 
@@ -14,7 +33,7 @@ Requirements: Node.js 22.20+ (22.x), npm, and PostgreSQL 14+.
    bytes. For example, generate 32 random bytes and Base64-encode them with a
    password manager; never commit or share the value.
 4. Create an empty `cloud_document_api` database in pgAdmin.
-5. Run `npm run db:migrate`. For an existing database with manually applied
+5. Verify the database is local before running `npm run db:migrate`. For an existing database with manually applied
    migrations, follow [the baseline instructions](docs/setup.md) instead.
 6. Run `npm run dev` and open `http://localhost:3000/app/` for the browser interface
    or `/health` for readiness.
@@ -34,7 +53,10 @@ hosting filesystems cannot retain uploads.
 | POST | `/auth/login` | Obtain a one-hour JWT |
 | GET | `/auth/me` | Get your authenticated profile |
 | GET | `/auth/admin-test` | Demonstrate admin role authorization |
-| POST | `/documents/upload` | Upload one PDF or UTF-8 text file |
+| POST | `/documents/upload` | Upload one PDF, UTF-8 text, JPEG, or PNG file |
+| POST / GET | `/purchases` | Save / list owned purchases |
+| GET / PUT | `/purchases/:id` | Read / replace a purchase with revision checks |
+| GET | `/purchases/:id/calendar` | Export a user-confirmed deadline as `.ics` |
 | GET | `/documents?limit=50&offset=0` | List your documents |
 | GET | `/documents/:id` | Read metadata and persisted results |
 | GET | `/search?q=term&limit=20&offset=0` | Ranked matches from your completed documents |
@@ -97,7 +119,8 @@ for server-side secrets. Existing local documents are not automatically moved.
 
 - Files: 5 MiB each; PDF header checks and UTF-8 validation are not malware
   scanning. Password-protected PDFs are rejected during processing. Image-only
-  PDFs need OCR, which is not implemented.
+  PDFs need PDF OCR, which is not implemented. JPEG/PNG receipts support browser
+  OCR; all suggestions need review. Images are decoded with pixel/dimension caps.
 - Work runs during the HTTP request. Rate limits are per process and reset on
   restart. There is no background queue, parser process isolation, or global
   concurrency bound. Use this release as a small portfolio demo, not a public

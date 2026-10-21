@@ -10,6 +10,7 @@ that return validation errors or processing failures.
 | `POST /documents/upload` | 20 requests per 15 minutes | Authenticated user ID |
 | `POST /documents/:id/process` | 20 requests per 15 minutes | Authenticated user ID |
 | `GET /search` | 60 requests per minute | Authenticated user ID |
+| `POST /purchases` and `PUT /purchases/:id` | Shared 60 writes per 15 minutes | Authenticated user ID |
 
 Exceeding an allowance returns HTTP `429`:
 
