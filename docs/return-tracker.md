@@ -189,11 +189,16 @@ adds relaxed-SIMD variants beyond older examples. Image bounds use
 
 ## Conservative suggestions and observed sample results
 
-The parser suggests only a plausible first merchant line, one unambiguous numeric
-purchase date, one explicitly labeled total, and a supported identifiable currency.
+The parser suggests a plausible business header (including a business name beside
+a RECEIPT/INVOICE heading), one unambiguous numeric purchase date, one explicitly
+labeled total, and a supported identifiable currency. A detected amount is retained
+even when the currency is uncertain; the user must select a currency before saving.
 It does not parse line items, interpret policy text, or use OCR confidence as field
-proof. Dates such as `10/11/2026` are left blank; multiple distinct dates or totals
-are flagged. `$` alone is not enough to choose USD/CAD/AUD. Currency codes, US$,
+proof. Dates such as `10/11/2026` are not automatically chosen: the form offers
+explicit calendar-date interpretations for the user to select. Labeled receipt/
+purchase dates take priority over unrelated dates, and payment due dates are
+excluded. Multiple distinct dates or totals are flagged. `$` alone is not enough
+to choose USD/CAD/AUD. Currency codes, US$,
 EUR/€, and GBP/£ can disambiguate. Named-month dates, handwritten receipts, localized
 number formats, discounts/multiple totals, faded/skewed photos, and inconsistent
 OCR may need manual correction. Unsupported currencies can be retained in notes
@@ -208,11 +213,22 @@ Observed using actual browser OCR locally on October 21, 2026:
 | Fixture | Real OCR / parser observation |
 | --- | --- |
 | `maple-goods.png` | Read MAPLE GOODS, 2026-10-21, USD, and 34.56. Browser test corrected the confirmed amount to 34.57 while retaining the original OCR/suggestion. |
-| `cedar-market.jpg` | Read CEDAR MARKET and its ambiguous 10/11/2026 date / $ total; date and currency/amount were intentionally left blank for review. |
+| `cedar-market.jpg` | Read CEDAR MARKET and its ambiguous 10/11/2026 date / $ total. The current parser keeps 34.56, asks for currency, and offers date interpretations without selecting one. |
 
 These clear generated receipts are smoke tests, not an accuracy benchmark for
 real-world receipts. The sample button uses the same authenticated upload and
 real OCR path as an uploaded image, with no hidden prefilled results.
+
+### Layout regression reported by the user
+
+A user-supplied multi-column repair receipt exposed two parser mistakes: a
+business name beside the RECEIPT heading was rejected, and a correctly recognized
+total was discarded when its currency was unknown. The fix separates those fields
+and supports split TOTAL/value lines. The ambiguous receipt date offers explicit
+choices; a separate payment due date is not treated as a purchase or return date.
+The file was used only in local OCR/browser verification and was not committed or
+published. Set `RECEIPT_TEST_IMAGE` when running the local Chromium browser suite
+to opt into this private regression check; deterministic tests use generic text.
 
 ## Dashboard and review behavior
 

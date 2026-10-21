@@ -124,6 +124,30 @@ test('browser receipt OCR, review, deadline, private originals, calendar, fallba
     assert.equal(await evaluate('document.getElementById("purchase-date").value'), '');
     assert.equal(await evaluate('document.getElementById("purchase-currency").value'), '');
     assert.match(await evaluate('document.getElementById("review-warnings").textContent'), /ambiguous/);
+    assert.equal(await evaluate('document.getElementById("purchase-amount").value'), '34.56');
+    assert.equal(await evaluate('document.querySelectorAll("#receipt-date-choices button").length'), 2);
+    await evaluate('document.querySelector("#receipt-date-choices button").click()');
+    assert.equal(await evaluate('document.getElementById("purchase-date").value'), '2026-10-11');
+    const extraReceiptPurchases = process.env.RECEIPT_TEST_IMAGE ? 1 : 0;
+    if (process.env.RECEIPT_TEST_IMAGE) {
+      // Private opt-in regression file stays outside the repo and is uploaded
+      // only to this isolated localhost server, never to the live service.
+      const bytes = (await readFile(process.env.RECEIPT_TEST_IMAGE)).toString('base64');
+      await evaluate(`document.getElementById('editor-close').click();{const dt=new DataTransfer();dt.items.add(new File([Uint8Array.from(atob(${JSON.stringify(bytes)}),c=>c.charCodeAt(0))],'private-layout-regression.png',{type:'image/png'}));document.getElementById('receipt-file').files=dt.files;document.getElementById('receipt-upload-form').requestSubmit()}`);
+      await wait('document.getElementById("raw-ocr").textContent.includes("East Repair") && !document.getElementById("purchase-save").disabled', 60000);
+      assert.equal(await evaluate('document.getElementById("purchase-merchant").value'), 'East Repair Inc.');
+      assert.equal(await evaluate('document.getElementById("purchase-amount").value'), '154.06');
+      assert.equal(await evaluate('document.getElementById("purchase-currency").value'), '');
+      assert.equal(await evaluate('document.getElementById("purchase-date").value'), '');
+      assert.equal(await evaluate('document.getElementById("deadline-source").value'), 'none');
+      assert.equal(await evaluate('document.getElementById("purchase-form").checkValidity()'), false);
+      assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("#receipt-date-choices button"),b=>b.dataset.date)'), ['2019-02-11','2019-11-02']);
+      await evaluate(`document.querySelector('#receipt-date-choices button').click();document.getElementById('purchase-currency').value='USD'`);
+      assert.equal(await evaluate('document.getElementById("purchase-form").checkValidity()'), true);
+      await evaluate('document.getElementById("purchase-form").requestSubmit()');
+      await wait('document.querySelectorAll(".purchase-card").length===2 && !document.getElementById("purchase-save").disabled');
+      assert.equal(await evaluate('Array.from(document.querySelectorAll(".purchase-card")).some(card=>card.querySelector("h3").textContent==="East Repair Inc." && card.querySelector(".purchase-money").textContent==="USD 154.06")'), true);
+    }
     // Cancellation during initialization removes the frame/worker and allows saving.
     await evaluate('document.getElementById("editor-close").click(); document.getElementById("sample-receipt").click()');
     await wait('!document.getElementById("ocr-progress").hidden');
@@ -132,7 +156,7 @@ test('browser receipt OCR, review, deadline, private originals, calendar, fallba
     assert.equal(await evaluate('document.querySelectorAll("iframe").length'),0);
     assert.match(await evaluate('document.getElementById("review-warnings").textContent'), /cancelled/);
     await evaluate(`document.getElementById('purchase-merchant').value='Manual fallback'; document.getElementById('purchase-form').requestSubmit()`);
-    await wait('document.querySelectorAll(".purchase-card").length === 2 && !document.getElementById("purchase-save").disabled');
+    await wait(`document.querySelectorAll(".purchase-card").length === ${2 + extraReceiptPurchases} && !document.getElementById("purchase-save").disabled`);
     // A real OCR library load failure must also leave a usable manual form.
     await command('Network.enable');
     await command('Network.setBlockedURLs', { urls: ['*/app/ocr/tesseract.min.js'] });
@@ -140,7 +164,7 @@ test('browser receipt OCR, review, deadline, private originals, calendar, fallba
     await wait('document.getElementById("review-warnings").textContent.includes("OCR failed") && !document.getElementById("purchase-save").disabled', 15000);
     await command('Network.setBlockedURLs', { urls: [] });
     await evaluate(`document.getElementById('purchase-merchant').value='OCR failure fallback'; document.getElementById('purchase-form').requestSubmit()`);
-    await wait('document.querySelectorAll(".purchase-card").length === 3 && !document.getElementById("purchase-save").disabled');
+    await wait(`document.querySelectorAll(".purchase-card").length === ${3 + extraReceiptPurchases} && !document.getElementById("purchase-save").disabled`);
     await evaluate(`document.getElementById('editor-close').click(); document.getElementById('purchase-filter').value='returned'; document.getElementById('purchase-filter').dispatchEvent(new Event('change'));`);
     assert.equal(await evaluate('document.querySelectorAll(".purchase-card").length'),1);
     await evaluate(`document.getElementById('purchase-filter').value='all'; document.getElementById('purchase-filter').dispatchEvent(new Event('change'));document.getElementById('document-workspace').open=true;`);

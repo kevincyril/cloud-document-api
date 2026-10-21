@@ -30,6 +30,30 @@ test('browser helpers retain exact money and calendar semantics', () => {
   assert.equal(U.status({deadline_date:'2024-03-10',returned:false}, '2024-03-11').days,-1);
   assert.equal(U.status({deadline_date:null,returned:false}).key,'no_deadline');
 });
+test('multi-column receipt headings and dollar totals remain useful without assuming currency', () => {
+  const text = 'Example Repair Ltd. RECEIPT\n1912 Example Lane\nReceipt Date 11/02/2019\nP.O.# 23/12/2019\nDueDate 26/02/2019\nSubtotal 145.00\nSales Tax 6.25% 9.06\nTOTAL $154.06';
+  const result = U.parseReceipt(text);
+  assert.equal(result.merchant, 'Example Repair Ltd.');
+  assert.equal(result.amount, '154.06');
+  assert.equal(result.currency, null);
+  assert.equal(result.purchaseDate, null);
+  assert.deepEqual(U.receiptDateReview(text).candidates, ['2019-02-11', '2019-11-02']);
+  assert.ok(result.warnings.some(w => /Payment due dates/.test(w)));
+  assert.ok(!result.warnings.some(w => /Total is missing/.test(w)));
+});
+test('receipt date labels exclude payment dates without inventing a purchase date', () => {
+  assert.equal(U.parseReceipt('EXAMPLE SHOP\nReceipt Date 21/10/2026\nDue Date 26/10/2026').purchaseDate, '2026-10-21');
+  assert.equal(U.parseReceipt('EXAMPLE SHOP\nDueDate 26/10/2026').purchaseDate, null);
+  assert.equal(U.parseReceipt('EXAMPLE SHOP\nReceipt Date\n21/10/2026\nDueDate 26/10/2026').purchaseDate, '2026-10-21');
+  assert.equal(U.parseReceipt('EXAMPLE SHOP\nReceipt Date 31/02/2026').purchaseDate, null);
+  assert.equal(U.parseReceipt('EXAMPLE SHOP\nReceipt Date 10/11/2026').purchaseDate, null);
+});
+test('standalone headings and split total labels work without choosing subtotal or tendered cash', () => {
+  const result = U.parseReceipt('RECEIPT\nExample Repair Ltd.\nSubtotal 145.00\nTOTAL\n$154.06\nCash $200.00');
+  assert.equal(result.merchant, 'Example Repair Ltd.'); assert.equal(result.amount, '154.06'); assert.equal(result.currency, null);
+  assert.equal(U.parseReceipt('EXAMPLE SHOP\nTOTAL $10.00\nTOTAL $11.00').amount, null);
+  assert.equal(U.parseReceipt('EXAMPLE SHOP\nSubtotal $10.00\nCash $20.00').amount, null);
+});
 test('calendar is an all-day event, escapes injection, and folds UTF-8 by octets', () => {
   const id = randomUUID();
   const text = purchaseCalendar(id, '店'.repeat(60) + ', Shop;\\\r\nBEGIN:VEVENT', '2024-02-29', new Date('2026-10-21T15:30:00Z'));

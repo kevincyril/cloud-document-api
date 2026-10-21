@@ -33,44 +33,70 @@
     const value = String(minor).padStart(places + 1, '0');
     return places ? value.slice(0, -places) + '.' + value.slice(-places) : value;
   }
-  function parseReceipt(text) {
-    const warnings = [];
+  function receiptDateReview(text) {
     const lines = String(text).slice(0, 30000).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-    const candidates = lines.filter(l => !/synthetic|sample receipt|demo only|no real|not valid|thank you/i.test(l));
-    const first = candidates[0] || '';
-    const merchant = /^[A-Za-z][A-Za-z &'’.-]{2,79}$/.test(first) && !/receipt|welcome|invoice|total|purchase|date/i.test(first) ? first : null;
-    if (!merchant) warnings.push('Merchant is uncertain; enter the store name.');
-    const dates = new Set(); let ambiguous = false;
-    for (const line of lines) {
+    // Prefer a transaction date label over unrelated dates elsewhere in a form.
+    const labeled = lines.map((line, index) => {
+      const label = /\b(?:receipt|purchase|transaction|sale)\s*date\s*:?\s*/i.exec(line);
+      if (!label) return null;
+      const remainder = line.slice(label.index + label[0].length);
+      // Some OCR layouts put a label and its value on adjacent lines.
+      return remainder || (/^\d{1,4}[/-]\d{1,2}[/-]\d{2,4}$/.test(lines[index + 1] || '') ? lines[index + 1] : '');
+    }).filter(value => value !== null);
+    const evidence = labeled.length ? labeled : lines.filter(line => !/due\s*date|payment\s*due|ship(?:ping)?\s*date|delivery\s*date|expir|return\s*(?:by|date|deadline)|\bp\.?\s*o\.?\s*#/i.test(line));
+    const dates = new Set(); let invalid = false;
+    for (const line of evidence) {
       for (const match of line.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
-        if (validDate(match[0])) dates.add(match[0]); else ambiguous = true;
+        if (validDate(match[0])) dates.add(match[0]); else invalid = true;
       }
       for (const match of line.matchAll(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b/g)) {
         const a = Number(match[1]), b = Number(match[2]);
-        if (a <= 12 && b <= 12 && a !== b) { ambiguous = true; continue; }
-        const month = a > 12 ? b : a, day = a > 12 ? a : b;
-        const date = `${match[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        if (validDate(date)) dates.add(date); else ambiguous = true;
+        const options = [`${match[3]}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`,
+          `${match[3]}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}`].filter(validDate);
+        if (!options.length) invalid = true;
+        options.forEach(date => dates.add(date));
       }
     }
-    const purchaseDate = !ambiguous && dates.size === 1 ? [...dates][0] : null;
-    if (!purchaseDate) warnings.push('Purchase date is missing or ambiguous; check the receipt and enter YYYY-MM-DD.');
+    const candidates = [...dates].sort();
+    return { purchaseDate: !invalid && candidates.length === 1 ? candidates[0] : null,
+      candidates: !invalid && candidates.length > 1 ? candidates.slice(0, 4) : [], labeled: labeled.length > 0 };
+  }
+  function parseReceipt(text) {
+    text = String(text).slice(0, 30000);
+    const warnings = [];
+    const lines = String(text).slice(0, 30000).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const candidates = lines.filter(l => !/synthetic|sample receipt|demo only|no real|not valid|thank you/i.test(l));
+    let merchant = null;
+    for (const line of candidates.slice(0, 5)) {
+      // Separate the business name from a second column's document heading.
+      const candidate = line.replace(/\s+(?:(?:sales|tax)\s+)?(?:receipt|invoice)\s*$/i, '').trim();
+      if (/^\d+\s|\b(?:bill\s*to|ship\s*to|receipt\s*date|purchase\s*date)\b/i.test(candidate)) break;
+      if (/^(?:receipt|invoice|welcome|date|total|subtotal|qty|description)\b/i.test(candidate)) continue;
+      if (/^[A-Za-z0-9][A-Za-z0-9 &'’.,()-]{2,99}$/.test(candidate) && (candidate.match(/[A-Za-z]/g) || []).length >= 3) { merchant = candidate; break; }
+    }
+    if (!merchant) warnings.push('Merchant is uncertain; enter the store name.');
+    const dateReview = receiptDateReview(text), purchaseDate = dateReview.purchaseDate;
+    if (!purchaseDate) warnings.push(dateReview.candidates.length ? 'Receipt date is ambiguous. Choose the correct interpretation below or enter it manually.' : 'Purchase date was not clearly identified; check the receipt and enter it if known.');
+    if (/due\s*date|payment\s*(?:is\s*)?due/i.test(text)) warnings.push('Payment due dates are not purchase dates or return deadlines.');
     const codes = new Set((text.match(/\b(?:USD|CAD|EUR|GBP|AUD|JPY|KWD)\b/g) || []));
     if (/US\$/.test(text)) codes.add('USD');
     if (/€/.test(text)) codes.add('EUR');
     if (/£/.test(text)) codes.add('GBP');
     const currency = codes.size === 1 ? [...codes][0] : null;
-    if (!currency) warnings.push('Currency is uncertain. A $ symbol alone does not identify the currency.');
+    if (!currency) warnings.push('Choose the currency. A $ symbol alone can mean USD, CAD, AUD, or another dollar currency.');
     const totals = [];
-    for (const line of lines) {
-      const match = line.match(/^(?:(?:grand|sale)\s+)?total\s*:?\s*(?:(?:USD|CAD|EUR|GBP|AUD|JPY|KWD|US\$|[$€£])\s*)?(\d{1,9}(?:\.\d{1,3})?)\s*(?:USD|CAD|EUR|GBP|AUD|JPY|KWD)?$/i);
+    const totalLine = /^(?:(?:grand|sale)\s+)?total\s*:?\s*(?:(?:USD|CAD|EUR|GBP|AUD|JPY|KWD|US\$|[$€£])\s*)?(\d{1,9}(?:\.\d{1,3})?)\s*(?:USD|CAD|EUR|GBP|AUD|JPY|KWD)?$/i;
+    for (let index = 0; index < lines.length; index++) {
+      const line = /^(?:(?:grand|sale)\s+)?total\s*:?$/i.test(lines[index]) ? `${lines[index]} ${lines[index + 1] || ''}` : lines[index];
+      const match = line.match(totalLine);
       if (match) totals.push(match[1]);
     }
-    let amount = totals.length === 1 && currency ? totals[0] : null;
-    if (amount && !(new RegExp(`^(0|[1-9]\\d{0,8})${digits[currency] ? `(\\.\\d{1,${digits[currency]}})?` : ''}$`)).test(amount)) amount = null;
+    let amount = totals.length === 1 ? totals[0] : null;
+    const precision = currency ? digits[currency] : 3;
+    if (amount && !(new RegExp(`^(0|[1-9]\\d{0,8})${precision ? `(\\.\\d{1,${precision}})?` : ''}$`)).test(amount)) amount = null;
     if (!amount) warnings.push('Total is missing or uncertain; enter the final amount, not subtotal or cash tendered.');
     warnings.push('OCR suggestions may be wrong. Review every field.');
     return { merchant, purchaseDate, amount, currency, warnings };
   }
-  return { validDate, addDays, today, status, decimal, parseReceipt };
+  return { validDate, addDays, today, status, decimal, parseReceipt, receiptDateReview };
 });

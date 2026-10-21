@@ -18,9 +18,12 @@
     $('sample-intro').hidden = false; $('purchase-fields').disabled = false; $('ocr-progress').hidden = true;
     $('policy-document').replaceChildren(new Option('No attachment', ''));
     $('receipt-retained').textContent = ''; $('review-warnings').textContent = '';
+    $('receipt-date-choices').replaceChildren(); $('receipt-date-choices').hidden = true;
     for (const id of ['count-open', 'count-soon', 'count-returned']) $(id).textContent = '0';
   }
   function sync() {
+    $('purchase-currency').required = $('purchase-amount').value.trim() !== '';
+    $('purchase-amount').required = $('purchase-currency').value !== '';
     $('purchase-previous').disabled = busy || pageOffset === 0;
     $('purchase-next').disabled = busy || !hasMore || pageOffset >= 10000;
     $('receipt-download').hidden = !draft?.receiptId;
@@ -83,6 +86,14 @@
     $('raw-ocr').textContent = draft?.ocr || 'No OCR text. Manual entry is available.';
     $('ocr-suggestions').textContent = JSON.stringify(draft?.suggestions || {}, null, 2);
     $('review-warnings').textContent = draft?.suggestions?.warnings?.join(' ') || 'Review the details against the original. You control every field.';
+    const choices = U.receiptDateReview(draft?.ocr || '').candidates;
+    $('receipt-date-choices').replaceChildren(); $('receipt-date-choices').hidden = !choices.length;
+    for (const date of choices) {
+      const readable = new Intl.DateTimeFormat('en', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(date + 'T00:00:00Z'));
+      const button = element('button', `${readable} (${date})`); button.type = 'button'; button.dataset.date = date;
+      button.onclick = () => { $('purchase-date').value = date; updateDeadline(); $('purchase-date').focus(); };
+      $('receipt-date-choices').append(button);
+    }
   }
   function updateDeadline(resetConfirmation = true) {
     if (resetConfirmation) $('deadline-confirm').checked = false;
@@ -262,6 +273,8 @@
   $('receipt-download').onclick = () => action('Downloading private receipt…', () => original(draft.receiptId));
   $('policy-download').onclick = () => action('Downloading private policy…', () => original($('policy-document').value));
   $('policy-document').onchange = sync;
+  $('purchase-amount').addEventListener('input', sync);
+  $('purchase-currency').addEventListener('change', sync);
   $('purchase-refresh').onclick = () => action('Refreshing purchases…', async () => { await loadPurchases(); notice('Purchases refreshed.'); });
   $('purchase-filter').onchange = render; $('purchase-sort').onchange = render;
   for (const [id, delta] of [['purchase-previous', -pageSize], ['purchase-next', pageSize]]) $(id).onclick = () => action('Loading purchases…', async () => { pageOffset = Math.max(0, Math.min(10000, pageOffset + delta)); await loadPurchases(); notice(); });
