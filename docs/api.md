@@ -1,5 +1,9 @@
 # Try the API in PowerShell
 
+Local next-version status: private search and source-unit retrieval are
+implemented. Apply migration 005 to your local database and reprocess documents
+before testing. The current live API has not been updated with these changes.
+
 Start the local API first. Registration and login use API account credentials;
 they are different from your PostgreSQL credentials. These commands prompt
 privately for the password and keep the JWT in a terminal variable.
@@ -62,3 +66,46 @@ exceed JavaScript's safe integer range.
 
 Opening a POST URL in a browser sends GET and does not process a file. Import
 `docs/openapi.json` into an API client for the full request/response definitions.
+
+## Private search and source references
+
+Use the same authenticated `$headers` from login:
+
+```powershell
+$query = [uri]::EscapeDataString("network sockets")
+$matches = Invoke-RestMethod -Uri "$baseUrl/search?q=$query&limit=20&offset=0" -Headers $headers
+$matches.results | Select-Object document_id, document_name, page_number, rank, excerpt
+# Only inspect the first result when at least one match exists:
+if ($matches.results.Count -gt 0) {
+    $match = $matches.results[0]
+    Invoke-RestMethod -Uri "$baseUrl/documents/$($match.document_id)/units/$($match.unit_index)" -Headers $headers
+}
+```
+
+Results contain `document_id`, `document_name`, `unit_index`, `page_number`,
+`rank`, and a plain-text `excerpt` of at most 600 characters. PDF page numbers
+are physical one-based viewer positions; text files have null page numbers.
+Only completed, indexed documents owned by the verified JWT user can match.
+A different account's source unit returns the same 404 as a nonexistent unit.
+No client-supplied owner parameter is accepted.
+
+`q` must trim to 1-200 characters without control characters. Missing, blank,
+array/object, or extra parameters return 400. `limit` defaults to 20 (1-50),
+`offset` defaults to 0 (0-1000). `pagination.hasMore` indicates another accessible
+page. Results sort by rank descending, then document ID and unit index. Separate
+pages can change while documents are processed; there is no snapshot cursor.
+
+Search uses English `plainto_tsquery`, `ts_rank_cd`, and `ts_headline` with empty
+highlight markers. All remaining terms must match within one PDF page/text unit;
+English stemming and stop words apply. Quotes/operators do not provide phrase
+or Boolean syntax. Punctuation-only/stop-word-only queries return 200 with an
+empty result list. Document filenames are displayed but not indexed. This is
+lexical retrieval, not fuzzy/substring/semantic search or generated answers.
+Non-English documents may match inconsistently with English language rules.
+Long text units are subject to PostgreSQL full-text size/position limits.
+
+Old completed documents have no page records until reprocessed. Retry clears old
+results first, so a failed attempt cannot leave old search matches. PDFs with no
+extractable text complete with a clear no-OCR message and no matches; OCR and
+summarization are not implemented. Excerpts and source text must be rendered as
+text (`textContent`), never interpreted as HTML.

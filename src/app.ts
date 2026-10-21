@@ -5,6 +5,7 @@ import { config } from "./config";
 import { pool } from "./database";
 import authRouter from "./routes/auth.routes";
 import documentRouter from "./routes/documents";
+import searchRouter from "./routes/search";
 import { errorHandler } from "./middleware/error.middleware";
 
 export const app = express();
@@ -18,6 +19,8 @@ app.use((_req, res, next) => {
 });
 app.use("/auth", authRouter);
 app.use("/documents", documentRouter);
+app.use("/search", searchRouter);
+app.use("/app", express.static(path.resolve(__dirname, "../public"), { etag: false, maxAge: 0 }));
 app.get("/", (_req, res) => {
   res.json({ name: "Cloud Document Processing API", documentation: "/openapi.json", health: "/health" });
 });

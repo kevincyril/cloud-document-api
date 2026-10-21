@@ -1,27 +1,50 @@
 # A $0 portfolio deployment: Render + Supabase
 
-Deployment in progress: a Supabase Free project and private bucket have been
-created; the prepared revision has not been pushed or deployed to Render. Use Free plans throughout. No student eligibility
-is required for this route. Verify the providers' current limits during signup;
-never select paid compute, add-ons, or an upgrade to work around a quota.
+The API is deployed at https://cloud-document-api.onrender.com using Render Free
+and Supabase Free. Use Free plans throughout; do not select paid compute,
+add-ons, or upgrades to work around quotas.
 
-## Deployment checkpoint — October 20, 2026
+## Verified deployment checkpoint
 
-- Both Render and Supabase connections were verified. Selected targets: Render
-  `My Workspace` and Supabase organization `cloud document api`.
-- Supabase project: `cloud-document-api` (`xhnfcmpidcnmgsfuktyf`), US West
-  (`us-west-1`), created on Free after an explicitly accepted $0/month quote.
-- Private `documents` bucket created with a 5,242,880-byte limit and MIME types
-  `application/pdf` and `text/plain`. No public storage policies were added.
-- Local checks passed: 27 unit/HTTP tests, 13 integration tests, TypeScript,
-  documentation/configuration validation, and build.
-- No application migrations have been applied to the cloud database. Run them
-  through the documented Render build command; do not baseline this new project.
-- Remaining: publish the prepared Git revision, configure Render Free with the
-  private Supabase session-pooler credentials and service-role key, deploy, and
-  complete the remote verification below. Never paste credentials into chat.
+The owner reported successful manual production smoke checks against the URL
+above. These are user-reported manual checks, not checks independently rerun by
+an agent and not a replacement for automated tests:
 
-Project dashboard: <https://supabase.com/dashboard/project/xhnfcmpidcnmgsfuktyf>.
+- `/health` reported the database connected; `/openapi.json` displayed the schema.
+- A disposable account registered and logged in, uploaded a PDF, and processed it.
+- Processing returned 2,438 words and 15,801 characters. Metadata reported
+  `completed` with the same persisted counts.
+- Downloaded original bytes had the same SHA-256 hash as the source PDF, both
+  before and after a Render service restart.
+- A second account received 404 for metadata, download, and processing requests
+  targeting the first account's document.
+
+The service is in Render's `My Workspace`; Supabase project `cloud-document-api`
+(`xhnfcmpidcnmgsfuktyf`) is in US West on Free. Its `documents` bucket is private,
+limited to 5,242,880 bytes and PDF/text MIME types. Migrations ran as part of the
+successful deployment. TLS verification uses the downloaded Supabase CA in a
+Render secret file named `supabase-ca.pem`, with
+`DB_SSL_CA_FILE=/etc/secrets/supabase-ca.pem` and `DB_SSL=true`.
+
+The browser UI and page-level private search in this checkout are prepared
+locally for review, not deployed. Migration 005 has not been applied to live
+Supabase. A future approved deploy will apply it through the build command;
+existing documents will then need reprocessing before they appear in search.
+No cloud changes, commits, or pushes are part of this documentation/UI update.
+
+### Remaining work for the current version
+
+- No deployment blocker remains in the owner-reported API smoke checks.
+- Remove disposable accounts and objects through trusted maintenance when no
+  longer needed; object removal is separate from database cascade deletion.
+- Monitor Free usage and back up data worth keeping. Recover interrupted
+  `processing` claims using the documented stopped-instance procedure if needed.
+- Review the local browser UI and its local test results before authorizing a
+  separate publication/deployment. Repeat browser smoke checks after deployment.
+
+Redis/BullMQ, shared rate limiting, parser isolation, quotas/deletion, OCR,
+summarization, and automated backups are optional future work, not completed
+features or prerequisites for the current small portfolio demo.
 
 ## Free-tier boundaries
 
@@ -80,7 +103,7 @@ Review `git status` and the diff. Confirm `.env`, `uploads`, certificates,
 `node_modules`, and personal test documents are excluded. Commit source, SQL,
 docs, tests, `package.json`, and `package-lock.json` together, then push only when
 you explicitly want to publish this revision. GitHub Actions checks it before
-deployment. CI itself has not run remotely until the workflow is pushed.
+deployment. Review GitHub Actions results for the specific revision being deployed.
 
 ## 3. Create the Render Free service
 
@@ -135,7 +158,8 @@ Use the returned HTTPS URL as `$baseUrl` in [the API walkthrough](api.md):
    database user cascades rows but does not remove Supabase objects automatically.
 
 The local Supabase adapter contract tests do not replace this remote verification.
-No real cloud round trip or public URL has been verified yet.
+The owner-reported production round trip is recorded above; repeat these checks
+after future deployment changes.
 
 ## Operating the demo
 

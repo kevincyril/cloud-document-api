@@ -40,3 +40,10 @@ export const processingLimiter = rateLimit({
   limit: 20,
   keyGenerator: (req) => req.user!.userId,
 });
+
+export const searchLimiter = rateLimit({
+  ...commonOptions,
+  windowMs: minute,
+  limit: 60,
+  keyGenerator: (req) => req.user!.userId,
+});

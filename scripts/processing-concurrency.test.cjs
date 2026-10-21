@@ -67,6 +67,7 @@ test('processing claims prevent overlap and failures can be retried', { timeout:
     await Promise.race([reading, first.then(() => { throw new Error('Processing did not reach the reader'); })]);
     const state = await pool.query('SELECT status FROM documents WHERE id = $1', [documentId]);
     assert.equal(state.rows[0].status, 'processing');
+    assert.equal((await pool.query('SELECT * FROM document_pages WHERE document_id=$1', [documentId])).rowCount, 0);
     const conflict = await processDocument();
     assert.equal(conflict.status, 409);
     assert.equal((await conflict.json()).message, 'Document is already processing');
@@ -76,11 +77,13 @@ test('processing claims prevent overlap and failures can be retried', { timeout:
     assert.equal((await first).status, 200);
     storage.readTextFile = originalRead;
     assert.equal((await processDocument()).status, 200, 'Completed documents can be processed again');
+    assert.equal((await pool.query('SELECT * FROM document_pages WHERE document_id=$1', [documentId])).rowCount, 1);
 
     storage.readTextFile = async () => { throw new Error('Simulated file read failure'); };
     assert.equal((await processDocument()).status, 500);
     const failed = await pool.query('SELECT status, extracted_text, word_count, character_count, processed_at FROM documents WHERE id = $1', [documentId]);
     assert.deepEqual(failed.rows[0], { status: 'failed', extracted_text: null, word_count: null, character_count: null, processed_at: null });
+    assert.equal((await pool.query('SELECT * FROM document_pages WHERE document_id=$1', [documentId])).rowCount, 0);
     storage.readTextFile = originalRead;
     assert.equal((await processDocument()).status, 200, 'Failed documents can be retried');
   } finally {

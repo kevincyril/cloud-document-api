@@ -1,5 +1,9 @@
 # Database setup and migrations
 
+The searchable workspace adds migration `005_document_pages_and_search.sql`.
+Apply it only to a reviewed local database for now; no live schema change has
+been authorized. Keep previously applied migrations unchanged.
+
 Use PostgreSQL 14 or newer (tested locally with 18). Create an empty database
 named `cloud_document_api` in pgAdmin. Fill in `.env` privately using
 `.env.example`, then run `npm run db:migrate` from the project directory.
@@ -62,3 +66,26 @@ This marks all interrupted processing attempts as failed and clears their
 results. Restart the API; owners can retry. Never run recovery while processing
 requests are active. It is an explicit maintenance operation, not an automatic
 startup reset that could race a rolling deployment.
+
+## Search migration and existing documents
+
+After checking that your ignored `.env` points to your local PostgreSQL host
+and database, run `npm run db:migrate`. The existing runner applies migration
+005 transactionally with its usual advisory lock/checksum history. Do not run
+baseline again on a database that already has migration history.
+
+Migration 005 creates `document_pages`, keyed by document and unit ordinal, with
+nullable PDF page numbers, text, a generated English search vector, and a GIN
+index. RLS is enabled and public/Supabase browser roles have no access. It does
+not reparse originals or change existing completed documents. Old text/counts
+remain readable; owners must select Extract again to create searchable pages.
+
+Processing clears old page data atomically when claiming the document and
+publishes replacement page text/search vectors and completed counts in one
+transaction. Read/parse/save failure leaves no published search rows for that
+attempt. The stopped-instance recovery command clears page data together with
+old text/counts. It still must never run while any API instance is active.
+
+`npm run test:integration` now includes isolated search schemas, cross-account
+isolation, page references, pagination, and publication rollback tests. These do
+not apply migration 005 to your normal application schema or live Supabase.

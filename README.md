@@ -1,7 +1,7 @@
 # Cloud Document Processing API
 
 A Node.js/TypeScript API for private document uploads, PDF/text extraction, and
-saved word/character counts. Built with Express, PostgreSQL, JWT authentication,
+saved word/character counts, and private full-text search. Built with Express, PostgreSQL, JWT authentication,
 and a storage adapter supporting local development or private Supabase objects.
 
 ## Run locally
@@ -16,7 +16,8 @@ Requirements: Node.js 22.20+ (22.x), npm, and PostgreSQL 14+.
 4. Create an empty `cloud_document_api` database in pgAdmin.
 5. Run `npm run db:migrate`. For an existing database with manually applied
    migrations, follow [the baseline instructions](docs/setup.md) instead.
-6. Run `npm run dev` and open `http://localhost:3000/health`.
+6. Run `npm run dev` and open `http://localhost:3000/app/` for the browser interface
+   or `/health` for readiness.
 
 `npm run build` compiles to `dist/`. `npm start` runs that compiled application;
 build before starting it. Files stay private: `uploads/` is never statically
@@ -36,6 +37,8 @@ hosting filesystems cannot retain uploads.
 | POST | `/documents/upload` | Upload one PDF or UTF-8 text file |
 | GET | `/documents?limit=50&offset=0` | List your documents |
 | GET | `/documents/:id` | Read metadata and persisted results |
+| GET | `/search?q=term&limit=20&offset=0` | Ranked matches from your completed documents |
+| GET | `/documents/:id/units/:unitIndex` | Read an owned match's source page/text unit |
 | GET | `/documents/:id/download` | Download original bytes |
 | POST | `/documents/:id/process` | Extract, analyze, and save results |
 
@@ -81,8 +84,12 @@ describe migration history and interrupted processing.
 
 ## Free deployment
 
-Prepared for one Render Free web service plus a Supabase Free database/private
-storage bucket. No resources are created by cloning or running tests. Follow
+The API is deployed at https://cloud-document-api.onrender.com on Render Free
+with a Supabase Free database and private storage bucket. The owner reported
+successful manual production smoke checks (health/schema, PDF extraction, saved
+results, identical SHA-256 downloads before/after restart, and cross-account
+404 ownership checks). These complement automated tests. The browser interface
+at `/app/` is a local implementation awaiting review and deployment. No resources are created by cloning or running tests. Follow
 [the deployment guide](docs/deployment.md); `render.yaml` contains placeholders
 for server-side secrets. Existing local documents are not automatically moved.
 
@@ -101,8 +108,29 @@ for server-side secrets. Existing local documents are not automatically moved.
   does not copy files. Database cascades do not delete file objects. There is no
   deletion/retention endpoint or per-user storage quota yet; monitor demo usage
   and remove test objects through trusted maintenance.
-- Free hosting may sleep/pause and has no uptime guarantee. Cloud credentials,
-  real remote-storage verification, and a public URL remain deployment steps.
+- Free hosting may sleep/pause and has no uptime guarantee. The deployed API
+  passed owner-run smoke checks; the new browser interface is not deployed yet.
 
 Future work: Redis/BullMQ workers, shared rate limits, parser resource limits,
 storage quotas/deletion, OCR, and automated backups.
+
+## Browser interface and learning guide
+
+The searchable workspace is prepared locally for review. Migration 005 stores
+PDF pages/text units with a full-text GIN index. Search returns ranked excerpts
+and physical PDF page numbers (null for text files), with ownership derived from
+JWTs. Existing documents need Extract again to populate the index. English word
+forms are matched and all remaining query words must occur in one unit; this is
+not OCR, substring/fuzzy search, or an AI answer service.
+See [search behavior and milestone status](docs/search-workspace.md).
+
+Run locally and visit `/app/`. The dependency-free interface supports account
+registration/login, PDF/text upload, extraction, saved text/counts, paginated
+documents, private search with source-page inspection, and authenticated downloads. Sessions stay in memory: refreshing
+signs out, and expiry or a protected 401 clears the workspace. The existing JSON
+root and API endpoints remain available. See [browser review](docs/browser.md)
+and [architecture walkthrough](docs/architecture.md).
+
+Run `npm run test:browser` for the local Edge/Chromium end-to-end flow. See
+[setup](docs/setup.md) before applying migration 005 to your local database.
+The new schema and UI are not deployed; future publication requires review.

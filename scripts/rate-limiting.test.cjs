@@ -8,7 +8,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { authenticate } = require('../src/middleware/auth.middleware.ts');
 const {
-  loginLimiter, registrationLimiter, uploadLimiter, processingLimiter,
+  loginLimiter, registrationLimiter, uploadLimiter, processingLimiter, searchLimiter,
 } = require('../src/middleware/rate-limit.middleware.ts');
 
 test('rate limits stop excess requests before route work', async t => {
@@ -20,11 +20,13 @@ test('rate limits stop excess requests before route work', async t => {
   const app = express();
   let uploads = 0;
   let processing = 0;
+  let searches = 0;
   // Deliberately return validation failures: unsuccessful attempts count too.
   app.post('/auth/login', loginLimiter, (_req, res) => res.status(400).json({ status: 'error' }));
   app.post('/auth/register', registrationLimiter, (_req, res) => res.status(400).json({ status: 'error' }));
   app.post('/upload', authenticate, uploadLimiter, (_req, res) => { uploads++; res.json({ status: 'ok' }); });
   app.post('/process', authenticate, processingLimiter, (_req, res) => { processing++; res.json({ status: 'ok' }); });
+  app.post('/search', authenticate, searchLimiter, (_req, res) => { searches++; res.json({ status: 'ok' }); });
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -73,6 +75,13 @@ test('rate limits stop excess requests before route work', async t => {
       for (let i = 0; i < 20; i++) assert.equal((await request('/process', firstToken)).status, 200);
       assertBlocked(await request('/process', firstToken));
       assert.equal(processing, 20);
+    });
+    await t.test('search is authenticated, independently limited, and keyed by verified user', async () => {
+      assert.equal((await request('/search')).status, 401);
+      for (let i = 0; i < 60; i++) assert.equal((await request('/search', firstToken)).status, 200);
+      assertBlocked(await request('/search', tokenFor(userId)));
+      assert.equal(searches, 60);
+      assert.equal((await request('/search', tokenFor(randomUUID()))).status, 200);
     });
   } finally {
     await new Promise(resolve => server.close(resolve));

@@ -3,14 +3,15 @@ import { z } from "zod";
 import { authenticate } from "../middleware/auth.middleware";
 import { upload } from "../middleware/upload";
 import { pool } from "../database";
-import { analyzeText } from "../services/text-processing";
+import { extractTextDocument, ExtractedDocument } from "../services/document-extraction";
+import { claimDocumentProcessing, saveDocumentResults } from "../services/document-results";
 import {
   saveFile,
   deleteFile,
   readTextFile,
   readFileBuffer,
 } from "../services/storage";
-import { extractPdfText } from "../services/pdf-processing";
+import { extractPdfDocument } from "../services/pdf-processing";
 import { FormatError, InvalidPDFException, PasswordException } from "pdf-parse";
 import { uploadLimiter, processingLimiter } from "../middleware/rate-limit.middleware";
 import { validateDocument } from "../middleware/validate-document";
@@ -147,6 +148,25 @@ router.get("/:id", authenticate, async (req, res, next) => {
   }
 });
 
+router.get("/:id/units/:unitIndex", authenticate, async (req, res, next) => {
+  const id = z.string().uuid().safeParse(req.params.id);
+  const unit = z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().min(1).max(100000)).safeParse(req.params.unitIndex);
+  if (!id.success || !unit.success) {
+    res.status(400).json({ status: "error", message: "Invalid document ID or unit index" });
+    return;
+  }
+  try {
+    const result = await pool.query(
+      `SELECT p.document_id, p.unit_index, p.page_number, p.text
+       FROM document_pages p JOIN documents d ON d.id = p.document_id
+       WHERE d.id = $1 AND d.user_id = $2 AND p.unit_index = $3 AND d.status = 'completed'`,
+      [id.data, req.user!.userId, unit.data],
+    );
+    if (!result.rowCount) { res.status(404).json({ status: "error", message: "Document unit not found" }); return; }
+    res.json({ status: "ok", unit: result.rows[0] });
+  } catch (error) { next(error); }
+});
+
 router.get("/:id/download", authenticate, async (req, res, next) => {
   const documentId = req.params.id;
 
@@ -230,17 +250,9 @@ router.post("/:id/process", authenticate, processingLimiter, async (req, res, ne
 
     // PostgreSQL checks and changes the status in one operation. Only one
     // request can claim the row, even when multiple API processes are running.
-    const claim = await pool.query(
-      `UPDATE documents
-       SET status = 'processing', extracted_text = NULL,
-           word_count = NULL, character_count = NULL,
-           processed_at = NULL, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1 AND user_id = $2 AND status <> 'processing'
-       RETURNING id`,
-      [documentId, req.user!.userId],
-    );
+    const claimedNow = await claimDocumentProcessing(documentId, req.user!.userId);
 
-    if (claim.rows.length === 0) {
+    if (!claimedNow) {
       const existing = await pool.query(
         "SELECT id FROM documents WHERE id = $1 AND user_id = $2",
         [documentId, req.user!.userId],
@@ -255,41 +267,15 @@ router.post("/:id/process", authenticate, processingLimiter, async (req, res, ne
     }
     claimed = true;
 
-    let text: string;
-
+    let extraction: ExtractedDocument;
     if (document.mime_type === "text/plain") {
-      text = await readTextFile(document.storage_key);
+      extraction = extractTextDocument(await readTextFile(document.storage_key));
     } else {
-      const buffer = await readFileBuffer(document.storage_key);
-      text = await extractPdfText(buffer);
+      extraction = await extractPdfDocument(await readFileBuffer(document.storage_key));
     }
-
-    const analysis = analyzeText(text);
-
-    const savedResult = await pool.query(
-      `UPDATE documents
-   SET extracted_text = $1,
-       word_count = $2,
-       character_count = $3,
-       processed_at = CURRENT_TIMESTAMP,
-       status = 'completed',
-       updated_at = CURRENT_TIMESTAMP
-   WHERE id = $4 AND user_id = $5
-   RETURNING id`,
-      [
-        analysis.text,
-        analysis.wordCount,
-        analysis.characterCount,
-        documentId,
-        req.user!.userId,
-      ],
-    );
-
-    if (savedResult.rows.length === 0) {
-      res.status(404).json({
-        status: "error",
-        message: "Document not found",
-      });
+    const analysis = await saveDocumentResults(documentId, req.user!.userId, extraction);
+    if (!analysis) {
+      res.status(404).json({ status: "error", message: "Document not found" });
       return;
     }
     claimed = false;
@@ -298,6 +284,9 @@ router.post("/:id/process", authenticate, processingLimiter, async (req, res, ne
       status: "ok",
       documentId: document.id,
       analysis,
+      message: extraction.hasExtractableText
+        ? "Document processed and searchable"
+        : "No extractable text found. Scanned PDFs require OCR, which is not supported.",
     });
   } catch (error) {
     if (claimed) {

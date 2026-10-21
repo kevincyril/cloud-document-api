@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Document Studio</title><link rel="stylesheet" href="/app/style.css">
+  <script src="/app/app.js" defer></script>
+</head>
+<body>
+  <header><a class="brand" href="/app/">▤ <span>Document Studio</span></a><span class="tag">Your private document workspace</span><button id="logout" hidden>Sign out</button></header>
+  <main>
+    <section class="intro"><p class="eyebrow">UPLOAD · EXTRACT · UNDERSTAND</p><h1>A little clarity.<br>For every document.</h1><p>Extract text from PDFs and text files. Keep the original, explore the words, and see the numbers.</p></section>
+    <p id="notice" role="status" aria-live="polite"></p>
+    <section id="auth" class="card auth"><div><p class="eyebrow">WELCOME TO YOUR WORKSPACE</p><h2 id="auth-title">Sign in</h2><p>Documents are private to your account.</p></div>
+      <form id="auth-form"><label id="name-label" hidden>Name<input id="name" name="name" minlength="2" maxlength="100" autocomplete="name" disabled></label><label>Email<input id="email" name="email" type="email" maxlength="255" autocomplete="username" required></label><label>Password<input id="password" name="password" type="password" maxlength="72" autocomplete="current-password" required></label><p class="muted" id="password-help">Your session lasts up to one hour. Refreshing signs you out.</p><button class="primary" id="auth-submit">Sign in</button><button type="button" class="link" id="auth-toggle">New here? Create an account</button></form>
+    </section>
+    <section id="workspace" hidden>
+      <div class="workspace-heading"><div><p class="eyebrow" id="greeting"></p><h2>Your documents</h2></div><button id="refresh">Refresh documents</button></div>
+      <form id="upload-form" class="card upload"><div><h3>Add a document</h3><p>PDF or UTF-8 text · Maximum 5 MiB</p><p class="muted">Text extraction and counts. Scanned images need OCR, which is not supported. Use nonsensitive demo files.</p></div><label class="file-label">Choose a PDF or text file<input id="file" type="file" accept=".pdf,.txt,application/pdf,text/plain" required></label><button class="primary" id="upload-submit">Upload document</button></form>
+      <section class="card search" aria-label="Search your documents">
+        <p class="eyebrow">FIND IT IN YOUR FILES</p><h3>Search your documents</h3>
+        <form id="search-form" role="search"><label>Search extracted text<input id="search-query" type="search" maxlength="200" placeholder="Try a topic or a few words" required aria-describedby="search-help"></label><button class="primary" id="search-submit">Search</button><button type="button" id="search-clear">Clear</button></form>
+        <p class="muted" id="search-help">Search matches, not AI answers. All words must match within one PDF page or text file. English word forms are matched; common words may be ignored. Older documents need Extract again to become searchable.</p>
+        <p id="search-status" role="status" aria-live="polite">Process a document to make its text searchable.</p>
+        <div id="search-results"></div><nav id="search-pagination" aria-label="Search result pages" hidden><button id="search-previous">Previous results</button><span id="search-page"></span><button id="search-next">Next results</button></nav>
+      </section>
+      <div class="columns"><section class="card library" aria-label="Document list"><div id="documents"></div><nav aria-label="Document pages"><button id="previous">Previous</button><span id="page"></span><button id="next">Next</button></nav></section>
+      <section class="card detail" aria-label="Selected document"><div id="empty"><span class="paper">▤</span><h3>Room for your next idea</h3><p>Upload a document or select one from your library to explore its text and counts.</p></div><div id="result" hidden><span id="status" class="badge"></span><h2 id="document-name"></h2><p id="document-info" class="muted"></p><div class="actions"><button id="process" class="primary">Extract text</button><button id="download">Download original</button></div><div class="counts"><div><strong id="words">—</strong><span>Words</span></div><div><strong id="characters">—</strong><span>Characters</span></div></div><div class="source-heading"><h3 id="text-heading">Extracted text</h3><button id="all-text" hidden>Show all text</button></div><pre id="text" tabindex="0"></pre><p id="processing-help" class="muted"></p></div></section></div>
+    </section>
+    <footer>Private by account. Originals preserved. <a href="/openapi.json">API schema</a></footer>
+  </main>
+</body></html>
