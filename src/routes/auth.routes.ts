@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { pool } from "../database";
 import jwt from "jsonwebtoken";
+import { config } from "../config";
+import { managedAuthRouter } from "./managed-auth";
 import { loginLimiter, registrationLimiter } from "../middleware/rate-limit.middleware";
 import {
   authenticate,
@@ -10,6 +12,11 @@ import {
 } from "../middleware/auth.middleware";
 
 const router = Router();
+router.use(managedAuthRouter);
+router.use(["/register", "/login"], (_req, res, next) => {
+  if (config.AUTH_MODE === "supabase") { res.status(410).json({ message: "Use verified email or a configured sign-in provider." }); return; }
+  next();
+});
 
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(100),

@@ -34,7 +34,7 @@ test('migration baseline, rollback, and checksum protection', { timeout: 20000 }
       await isolated.query("INSERT INTO users (id, name, email, password_hash) VALUES ($1, 'Baseline fixture', $2, 'unused-test-hash')", [id, `${id}@example.com`]);
       await migrate(isolated, { baselineExisting: true, log: () => {} });
       assert.equal((await isolated.query('SELECT id FROM users WHERE id = $1', [id])).rowCount, 1);
-      assert.equal((await isolated.query('SELECT name FROM schema_migrations')).rowCount, 6);
+      assert.equal((await isolated.query('SELECT name FROM schema_migrations')).rowCount, 7);
       await assert.rejects(migrate(isolated, { baselineExisting: true, log: () => {} }), /migration history already exists/);
       await migrate(isolated, { log: () => {} });
     });

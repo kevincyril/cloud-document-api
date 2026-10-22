@@ -8,6 +8,7 @@ function notice(message = '', error = false) {
   if (error && message) $('notice').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 function signOut(message = 'Signed out.') {
+  window.ManagedAuth?.clear();
   window.ReceiptTracker?.reset();
   generation++; token = ''; selected = null; clearTimeout(expiryTimer); clearTimeout(pollTimer);
   $('workspace').hidden = true; $('auth').hidden = false; $('logout').hidden = true;
@@ -103,17 +104,22 @@ $('auth-toggle').onclick = () => {
 };
 $('auth-form').onsubmit = event => {
   event.preventDefault(); action(registration ? 'Creating account…' : 'Signing in…', async () => {
+    await window.ManagedAuth.ready;
+    if (window.ManagedAuth.enabled) { await window.ManagedAuth.submit(registration); return; }
     const email = $('email').value.trim(), password = $('password').value;
     if (new TextEncoder().encode(password).length > 72) throw new Error('Password must be at most 72 UTF-8 bytes.');
     if (registration) { await request('/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: $('name').value.trim(), email, password }) }); notice('Account created. Signing in…'); }
     const body = await request('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+    await completeSignIn(body);
+  });
+};
+async function completeSignIn(body) {
     token = body.token; offset = 0; $('auth-form').reset();
     $('auth').hidden = true; $('workspace').hidden = false; $('logout').hidden = false; $('greeting').textContent = `WELCOME, ${body.user.name}`;
     const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
     expiryTimer = setTimeout(() => signOut('Your session expired. Sign in again.'), Math.max(0, payload.exp * 1000 - Date.now()));
     await list(); await window.ReceiptTracker?.onLogin(); notice('Signed in. Your return desk is ready.');
-  });
-};
+}
 $('logout').onclick = () => signOut();
 $('upload-form').onsubmit = event => { event.preventDefault(); action('Uploading document…', async () => {
   const file = $('file').files[0]; if (!file) throw new Error('Choose a file first.');

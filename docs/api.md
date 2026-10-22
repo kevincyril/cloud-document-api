@@ -1,3 +1,20 @@
+# Authentication modes
+
+The default `AUTH_MODE=legacy` retains the existing registration and password API.
+The optional managed mode adds `GET /auth/config` (public mode/provider settings)
+and `POST /auth/exchange` with `{ "accessToken": "provider access token" }`.
+The server verifies the identity with Supabase Auth and requires confirmed email.
+Successful exchange returns the existing app JWT and public user fields.
+An existing unlinked workspace returns HTTP 428 with `code: "link_required"`;
+repeat with `legacyPassword` to prove ownership. Incorrect proof returns 401 and
+a conflicting identity returns 409. Provider failures return 503. Client roles
+are ignored. Managed mode disables the legacy register/login endpoints (410).
+Migration 007 is additive. Setup and release checks: [auth setup](auth-setup.md).
+`AUTH_PUBLIC_ENABLED=false` restricts managed exchange to `AUTH_ALLOWED_EMAILS`
+(403 for uninvited identities). Email-disabled mode requires an OAuth session
+and an identity from a configured social provider. The tester allowlist is never
+included in the public configuration response.
+
 # Receipt and purchase API (local implementation)
 
 Authenticated `/purchases` supports create, list, detail, and full replacement

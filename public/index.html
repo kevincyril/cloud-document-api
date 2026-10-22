@@ -6,6 +6,7 @@
   <script src="/app/receipt-utils.js" defer></script>
   <script src="/app/app.js" defer></script>
   <script src="/app/receipts.js" defer></script>
+  <script src="/app/managed-auth.js" defer></script>
 </head>
 <body>
   <header><a class="brand" href="/app/"><span class="brand-mark" aria-hidden="true">&#8617;</span><span>Return Keeper</span></a><span class="tag">Receipts together. Deadlines in sight.</span><button id="logout" hidden>Sign out</button></header>
@@ -15,6 +16,7 @@
     <p id="sample-intro">A two-minute demo: sign in, try a synthetic receipt, review the suggestions, then confirm a deadline. <button id="sample-start">Try a sample receipt</button></p>
     <section id="auth" class="card auth"><div><p class="eyebrow">WELCOME TO YOUR WORKSPACE</p><h2 id="auth-title">Sign in</h2><p>Documents are private to your account.</p></div>
       <form id="auth-form" method="post" action="/auth/login"><label id="name-label" hidden>Name<input id="name" name="name" minlength="2" maxlength="100" autocomplete="name" disabled></label><label>Email<input id="email" name="email" type="email" maxlength="255" autocomplete="username" required></label><label>Password<input id="password" name="password" type="password" maxlength="72" autocomplete="current-password" required></label><p class="muted" id="password-help">Your session lasts up to one hour. Refreshing signs you out.</p><button class="primary" id="auth-submit">Sign in</button><button type="button" class="link" id="auth-toggle">New here? Create an account</button></form>
+      <div id="managed-options" hidden><p id="managed-help">Verify your email before signing in, or use a sign-in provider.</p><div id="auth-providers" class="actions"></div><button id="auth-resend" type="button" hidden>Resend verification email</button><form id="auth-link" hidden><label>Previous workspace password<input id="legacy-password" type="password" autocomplete="current-password" maxlength="72" required></label><button>Link existing receipts</button></form></div>
     </section>
     <section id="workspace" hidden>
       <section id="tracker" aria-label="Return deadline tracker">

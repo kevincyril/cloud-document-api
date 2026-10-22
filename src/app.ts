@@ -15,7 +15,7 @@ app.set("trust proxy", config.TRUST_PROXY_HOPS === 0 ? false : config.TRUST_PROX
 app.use(helmet());
 // The main UI needs blob images for authenticated receipt previews. Only the
 // OCR frame and its dedicated worker may compile WebAssembly (never JS eval).
-app.use("/app", helmet.contentSecurityPolicy({ directives: { imgSrc: ["'self'", "data:", "blob:"] } }));
+app.use("/app", helmet.contentSecurityPolicy({ directives: { imgSrc: ["'self'", "data:", "blob:"], connectSrc: ["'self'", ...(config.AUTH_MODE === "supabase" ? [new URL(config.SUPABASE_AUTH_URL).origin] : [])] } }));
 app.use(["/app/ocr-frame.html", "/app/ocr/worker.min.js"], helmet.contentSecurityPolicy({ directives: {
   scriptSrc: ["'self'", "'wasm-unsafe-eval'"], workerSrc: ["'self'"], connectSrc: ["'self'"],
   imgSrc: ["'self'", "blob:", "data:"], frameAncestors: ["'self'"],
@@ -29,6 +29,9 @@ app.use("/auth", authRouter);
 app.use("/documents", documentRouter);
 app.use("/search", searchRouter);
 app.use("/purchases", purchaseRouter);
+app.get("/app/auth/supabase.js", (_req, res) => {
+  res.sendFile(path.resolve(__dirname, "../node_modules/@supabase/supabase-js/dist/umd/supabase.js"));
+});
 // Explicit public asset paths; never expose arbitrary node_modules files.
 app.get("/app/ocr/:asset", (req, res, next) => {
   const asset = req.params.asset;

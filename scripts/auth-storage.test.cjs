@@ -1,0 +1,20 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { createAuthStorage } = require('../public/managed-auth.js');
+test('PKCE survives navigation briefly; access and refresh sessions never persist', () => {
+  const values = new Map();
+  const storage = { getItem: k => values.get(k) ?? null, setItem: (k,v) => values.set(k,v), removeItem: k => values.delete(k), key: i => [...values.keys()][i], get length() { return values.size; } };
+  let now = 100;
+  const first = createAuthStorage(storage, () => now);
+  first.setItem('return-keeper-auth', 'SECRET SESSION');
+  first.setItem('return-keeper-auth-flow-123-code-verifier', 'pkce');
+  assert.equal(values.size, 1);
+  assert.equal(first.getItem('return-keeper-auth'), 'SECRET SESSION');
+  const next = createAuthStorage(storage, () => now);
+  assert.equal(next.getItem('return-keeper-auth'), null);
+  assert.equal(next.getItem('return-keeper-auth-flow-123-code-verifier'), 'pkce');
+  now += 15 * 60 * 1000;
+  assert.equal(next.getItem('return-keeper-auth-flow-123-code-verifier'), null);
+  assert.equal(values.size, 0);
+  first.clear(); assert.equal(first.getItem('return-keeper-auth'), null);
+});

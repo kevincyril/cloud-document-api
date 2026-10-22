@@ -11,6 +11,14 @@ const configuration = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   STORAGE_DRIVER: z.enum(["local", "supabase"]).default("local"),
   UPLOAD_DIR: z.string().min(1).default("uploads"),
+  AUTH_MODE: z.enum(["legacy", "supabase"]).default("legacy"),
+  AUTH_EMAIL_ENABLED: z.enum(["true", "false"]).default("false"),
+  AUTH_PROVIDERS: z.string().default(""),
+  AUTH_PUBLIC_ENABLED: z.enum(["true", "false"]).default("false"),
+  AUTH_ALLOWED_EMAILS: z.string().default(""),
+  SUPABASE_PUBLISHABLE_KEY: z.string().default(""),
+  SUPABASE_AUTH_URL: z.string().default(""),
+  APP_URL: z.string().default(""),
 });
 
 const parsed = configuration.safeParse(process.env);
@@ -21,6 +29,19 @@ if (!parsed.success) {
 export const config = parsed.data;
 
 export function validateServerConfiguration(): void {
+  if (config.AUTH_MODE === "supabase") {
+    const authUrl = new URL(config.SUPABASE_AUTH_URL);
+    const appUrl = new URL(config.APP_URL);
+    for (const url of [authUrl, appUrl]) {
+      if (url.protocol !== "https:" && !(config.NODE_ENV !== "production" && url.protocol === "http:" && url.hostname === "127.0.0.1")) throw new Error("Authentication URLs require HTTPS");
+      if (url.username || url.password || url.search || url.hash) throw new Error("Invalid authentication URL");
+    }
+    if (!config.SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_")) throw new Error("Use a Supabase publishable key for authentication");
+    const providers = config.AUTH_PROVIDERS.split(",").filter(Boolean);
+    if (providers.some(provider => !["google", "apple", "github"].includes(provider))) throw new Error("Invalid AUTH_PROVIDERS");
+    if (!providers.length && config.AUTH_EMAIL_ENABLED !== "true") throw new Error("Enable an authentication provider");
+    if (config.AUTH_ALLOWED_EMAILS.split(",").filter(Boolean).some(email => !z.email().safeParse(email.trim()).success)) throw new Error("Invalid AUTH_ALLOWED_EMAILS");
+  }
   if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET is required");
   if (config.NODE_ENV === "production") {
     if (Buffer.byteLength(process.env.JWT_SECRET) < 32) {

@@ -30,7 +30,7 @@ test('fresh schema migrations and complete API behavior', { timeout: 45000 }, as
     await migrate(pool, { log: () => {} });
     await migrate(pool, { log: () => {} });
     const history = await pool.query('SELECT name FROM schema_migrations');
-    assert.equal(history.rowCount, 6);
+    assert.equal(history.rowCount, 7);
     const { app } = require(compiled ? '../dist/app.js' : '../src/app.ts');
     server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.once('listening', resolve));
