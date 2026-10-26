@@ -1,11 +1,12 @@
 # Verified email and social sign-in
 
-Google and email authentication use Supabase in a restricted preview. Email account creation verifies a code before password creation; later visits use email and password. Forgotten-password recovery verifies a new email code before saving a replacement password. The owner has confirmed the earlier email-code and Google flows. The new password flows need an actual inbox check after deployment. Public access remains disabled by the owner's latest instruction. No paid plan or Apple membership was created by this change.
+Google and email authentication use Supabase in a restricted preview. Email account creation verifies a code before password creation; later visits use email and password. Forgotten-password recovery verifies a new email code before saving a replacement password. The owner has confirmed real Google sign-in, email delivery, password setup, password sign-in, and password recovery, with existing receipts preserved. Public access remains disabled by the owner's latest instruction. No paid plan or Apple membership was created by this change.
 
 ## Current rollout status
 
 - Live app: https://cloud-document-api.onrender.com/app/.
 - Email-code login was introduced in release `28afd2f`, Render deploy `dep-dbfbaeqjnfac738ok9g0`.
+- Password setup, password sign-in, and code-based recovery were deployed in release `3ea183e`, Render deploy `dep-dbfsnud9el5s738hdjkg`. On October 26, 2026, the owner confirmed that password setup and recovery both work and receipts remain intact.
 - `AUTH_EMAIL_ENABLED=true`, `AUTH_PROVIDERS=google`, `AUTH_PUBLIC_ENABLED=false`; the tester allowlist is configured privately in Render.
 - Migration 007 is applied. The verified test identity is linked to an application account. Direct Supabase Data API reads of the users table remain unavailable to both `anon` and `authenticated` roles.
 - Real email delivery and sign-in: confirmed by the owner. Simulated-provider browser tests cover invalid codes, one-time use, resend waiting, Google callbacks, and account linking.
@@ -13,7 +14,19 @@ Google and email authentication use Supabase in a restricted preview. Email acco
 - Current SMTP sender: `onboarding@resend.dev`, confirmed by the owner. This test sender is restricted to the Resend account's own email address and cannot support public email-code login. A verified sending domain and a sender on that domain are still needed for other recipients.
 - Live health, email-code UI, Google redirect, legacy endpoint blocking, and invalid-token rejection: checked successfully.
 - Purchase persistence, search, CSV export, sessions after refresh, and the latest receipt fix: confirmed by the owner.
-- Before opening access: configure a verified sending domain and sender for public email delivery, verify the password creation/sign-in/recovery flows with a real inbox, and confirm Google's audience allows public users. The owner has requested keeping access restricted while preparing passwords.
+- Before opening access: configure a verified sending domain and sender for public email delivery, test delivery to another recipient, and confirm Google's audience allows public users. The owner has requested keeping access restricted. The real-inbox password check is complete.
+
+### Remaining public-release steps
+
+These steps are pending; the current private preview is working.
+
+1. The owner supplies a domain they control and adds the DNS records shown by Resend. Keep credentials in the provider dashboards.
+2. Once Resend reports the domain verified, replace `onboarding@resend.dev` in Supabase SMTP settings with an address on that domain. Keep **Confirm email** enabled.
+3. Test verification and password recovery with another permitted recipient. Until public release, add only explicitly invited tester addresses to the Render allowlist.
+4. Confirm the Google OAuth audience is ready for public users; successful sign-in by the existing tester does not prove that new users are allowed by Google.
+5. After these checks and renewed owner approval to open access, set `AUTH_PUBLIC_ENABLED=true` on the existing Render service, deploy, and verify a new account can sign in while existing private receipts remain isolated.
+
+Do not enable public access with the current test sender. A Google-only public release is a separate option if the owner explicitly chooses it; disable email login for that release instead of showing email flows that cannot deliver to new users.
 
 ## Email verification, passwords, and recovery
 
@@ -57,7 +70,7 @@ In the [Supabase project](https://supabase.com/dashboard/project/xhnfcmpidcnmgsf
 
 The test sender only sends to the address associated with your Resend account. To send codes to other users, verify a domain you control in Resend and replace the sender with an address on that domain. Do not buy a domain just to test your own login. See [SMTP settings](https://resend.com/docs/send-with-smtp) and [test-sender restrictions](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain).
 
-Save SMTP settings, then complete the email-template steps below. Tell the app maintainer when SMTP and both templates are saved; the new local code must be deployed with email enabled before the code form appears on the live site.
+SMTP and both code templates are already configured for the restricted preview, and email login is deployed. The steps below also apply when replacing the test sender with a verified domain sender.
 
 ### Templates and delivery checks
 
