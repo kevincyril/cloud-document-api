@@ -1,5 +1,20 @@
 # Authentication modes
 
+Browser sign-in now also sets an HttpOnly, SameSite=Strict session cookie
+(`__Host-return_keeper`, Secure in production; `return_keeper` locally).
+`GET /auth/session` restores the profile, CSRF token, and original one-hour expiry
+after refresh. Cookie-authenticated writes require `X-CSRF-Token`.
+`POST /auth/logout` clears the cookie and requires CSRF for a valid session.
+Existing API bearer tokens remain supported; copied tokens expire normally.
+
+Purchase list queries accept `q`, `status`, `sort`, and a browser calendar `today`,
+and return matching totals, `hasMore`, and account-wide summary counts. Search
+and sorting cover all owned records. `GET /purchases/export` exports all matches
+as CSV, with a 10,000-record cap. `PATCH /purchases/:id/returned` takes
+`{revision, returned}` and preserves deadline confirmation. `DELETE /purchases/:id`
+takes `{revision}` and deletes only the purchase details, retaining original
+documents. Both writes check ownership and reject stale revisions with 409.
+
 The default `AUTH_MODE=legacy` retains the existing registration and password API.
 The optional managed mode adds `GET /auth/config` (public mode/provider settings)
 and `POST /auth/exchange` with `{ "accessToken": "provider access token" }`.

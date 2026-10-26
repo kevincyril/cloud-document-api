@@ -84,7 +84,7 @@ test('Firefox real receipt OCR, confirmation, private preview, calendar, cancell
     await evaluate(`(()=>{document.getElementById('logout').click();document.getElementById('name').value='Second Firefox tester';document.getElementById('email').value=${JSON.stringify(randomUUID() + '@example.com')};document.getElementById('password').value=${JSON.stringify(password)};document.getElementById('auth-form').requestSubmit()})()`);
     await wait('!document.getElementById("workspace").hidden && !document.getElementById("sample-receipt").disabled');
     assert.equal(await evaluate('document.querySelectorAll(".purchase-card").length'), 0);
-    for (const route of [`/purchases/${purchaseId}`, `/purchases/${purchaseId}/calendar`, `/documents/${receiptId}/download`]) assert.equal(await evaluate(`(async()=> (await fetch(${JSON.stringify(route)},{headers:{Authorization:'Bearer '+token}})).status)()`), 404);
+    for (const route of [`/purchases/${purchaseId}`, `/purchases/${purchaseId}/calendar`, `/documents/${receiptId}/download`]) assert.equal(await evaluate(`(async()=> (await fetch(${JSON.stringify(route)},{credentials:'same-origin'})).status)()`), 404);
     assert.equal(await evaluate('localStorage.length+sessionStorage.length'), 0);
   } finally {
     if (socket) socket.close();

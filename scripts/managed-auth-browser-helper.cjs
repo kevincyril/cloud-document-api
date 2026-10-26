@@ -59,6 +59,15 @@ exports.checkBrowser = async (base, { googleOnly = false } = {}) => {
     assert.equal(await evaluate('location.search + location.hash'), '');
     assert.equal(await evaluate('localStorage.length'), 0);
     assert.deepEqual(errors, []);
+    await command('Page.reload');
+    await wait('!document.getElementById("workspace").hidden && !document.getElementById("refresh").disabled');
+    assert.equal(await evaluate('document.cookie.includes("return_keeper")'),false);
+    await evaluate('document.getElementById("logout").click()');
+    await wait('document.getElementById("workspace").hidden');
+    await evaluate('sessionEnd');
+    await command('Page.reload');
+    await wait('document.readyState==="complete" && Boolean(window.ManagedAuth)');
+    assert.equal(await evaluate('document.getElementById("workspace").hidden'),true);
   } finally {
     socket?.close();
     if (browser && browser.exitCode === null) { browser.kill(); await new Promise(resolve => browser.once('exit', resolve)); }

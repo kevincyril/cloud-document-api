@@ -47,6 +47,7 @@ if (typeof window !== 'undefined') {
   }, submit, sync, ready: null };
   function check(result) { if (result.error) throw new Error(result.error.status === 429 ? 'Too many attempts. Wait before trying again.' : 'Sign-in could not complete. Check your details and verify your email, then try again.'); return result.data; }
   async function exchange(session, legacyPassword) {
+    await sessionEnd;
     if (!session?.access_token) throw new Error('No sign-in session returned. Sign in again after verifying your email.');
     const response = await fetch('/auth/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ accessToken: session.access_token, legacyPassword }) });
     const body = await response.json();
@@ -79,7 +80,7 @@ if (typeof window !== 'undefined') {
     if (settings.restricted) $('managed-help').textContent = 'Preview: sign-in is limited to invited testers. ' + $('managed-help').textContent;
     for (const provider of settings.providers) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = `Continue with ${provider === 'github' ? 'GitHub' : provider[0].toUpperCase() + provider.slice(1)}`;
-      button.onclick = () => action('Opening sign-in…', async () => { await clearing; check(await client.auth.signInWithOAuth({ provider, options: { redirectTo: settings.redirectTo } })); });
+      button.onclick = () => action('Opening sign-in…', async () => { await sessionEnd; await clearing; check(await client.auth.signInWithOAuth({ provider, options: { redirectTo: settings.redirectTo } })); });
       $('auth-providers').append(button);
     }
     $('code-email').oninput = () => {
@@ -89,6 +90,7 @@ if (typeof window !== 'undefined') {
     };
     $('email-code-request').onsubmit = event => { event.preventDefault(); action('Sending sign-in code…', async () => {
       await clearing;
+      await sessionEnd;
       if (!settings.emailEnabled) throw new Error('Email sign-in is not enabled.');
       const email = $('code-email').value.trim().toLowerCase();
       if (!$('code-email').checkValidity() || !email) throw new Error('Enter a valid email address first.');

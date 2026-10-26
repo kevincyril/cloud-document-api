@@ -5,8 +5,10 @@ correct the suggestions, and confirm your return deadline. A responsive dashboar
 shows days remaining, saved originals, and Returned status. Export an all-day
 calendar event; return reminders are not sent by email or SMS.
 
-Search purchases by store, description, or policy notes on the current page,
-and export the filtered view as CSV with exact amounts and original currencies.
+Search all purchases by store, description, or policy notes, and export all
+matching records as CSV (up to 10,000), with exact amounts and original currencies.
+Filter due-soon purchases and mark returns directly from the dashboard. Deleting
+purchase details requires confirmation and keeps original files in the library.
 Unsaved purchase edits prompt before closing, replacing the form, signing out,
 or leaving the page. Drafts remain in memory; no private form data is stored in
 browser storage. Forced session expiry still clears private state.
@@ -30,7 +32,7 @@ Open the [live website](https://cloud-document-api.onrender.com/app/) and follow
 the [demo walkthrough, screenshots, and portfolio copy](docs/demo.md).
 
 1. Use the live site, or run against an explicitly chosen **local** database with all migrations applied.
-2. Open `/app/`, create an account, and select **Try a sample receipt**.
+2. Open `/app/`, sign in (the live preview requires an invited account), and select **Try a sample receipt**.
 3. Watch real browser OCR, review the synthetic receipt, and correct any field.
 4. Choose an explicit deadline or a user-supplied day window. Check the displayed
    calculation, then confirm and save.
@@ -165,8 +167,10 @@ See [search behavior and milestone status](docs/search-workspace.md).
 
 Run locally and visit `/app/`. The dependency-free interface supports account
 registration/login, PDF/text upload, extraction, saved text/counts, paginated
-documents, private search with source-page inspection, and authenticated downloads. Sessions stay in memory: refreshing
-signs out, and expiry or a protected 401 clears the workspace. The existing JSON
+documents, private search with source-page inspection, and authenticated downloads. Browser sessions use HttpOnly,
+SameSite=Strict cookies (Secure in production) and survive refresh for up to one
+hour. Cookie-authenticated writes require a CSRF token; expiry or a protected 401
+clears the workspace. API bearer tokens remain supported. The existing JSON
 root and API endpoints remain available. See [browser review](docs/browser.md)
 and [architecture walkthrough](docs/architecture.md).
 

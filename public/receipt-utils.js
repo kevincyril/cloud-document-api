@@ -41,7 +41,7 @@
       if (!label) return null;
       const remainder = line.slice(label.index + label[0].length);
       // Some OCR layouts put a label and its value on adjacent lines.
-      return remainder || (/^\d{1,4}[/-]\d{1,2}[/-]\d{2,4}$/.test(lines[index + 1] || '') ? lines[index + 1] : '');
+      return remainder || (/^\d{1,4}[/-]\d{1,2}[/-]\d{2,4}$|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i.test(lines[index + 1] || '') ? lines[index + 1] : '');
     }).filter(value => value !== null);
     const evidence = labeled.length ? labeled : lines.filter(line => !/due\s*date|payment\s*due|ship(?:ping)?\s*date|delivery\s*date|expir|return\s*(?:by|date|deadline)|\bp\.?\s*o\.?\s*#/i.test(line));
     // A separate labeled date can establish formatting, never the purchase value.
@@ -57,8 +57,17 @@
     const order = orders.size === 1 ? [...orders][0] : null;
     const dates = new Set(), preferred = new Set(); let invalid = false;
     for (const line of evidence) {
-      for (const match of line.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
-        if (validDate(match[0])) { dates.add(match[0]); preferred.add(match[0]); } else invalid = true;
+      const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+      const monthPattern = '(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)';
+      for (const [pattern, dayIndex, monthIndex] of [[new RegExp('\\b' + monthPattern + '\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?[,]?\\s+(\\d{4})\\b','gi'),2,1], [new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+' + monthPattern + '\\.?[,]?\\s+(\\d{4})\\b','gi'),1,2]]) {
+        for (const match of line.matchAll(pattern)) {
+          const date = `${match[3]}-${String(months.indexOf(match[monthIndex].slice(0,3).toLowerCase())+1).padStart(2,'0')}-${match[dayIndex].padStart(2,'0')}`;
+          if (validDate(date)) { dates.add(date); preferred.add(date); } else invalid = true;
+        }
+      }
+      for (const match of line.matchAll(/\b(\d{4})[/-](\d{2})[/-](\d{2})\b/g)) {
+        const date = `${match[1]}-${match[2]}-${match[3]}`;
+        if (validDate(date)) { dates.add(date); preferred.add(date); } else invalid = true;
       }
       for (const match of line.matchAll(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b/g)) {
         const a = Number(match[1]), b = Number(match[2]);
@@ -83,17 +92,17 @@
     let merchant = null;
     for (const line of candidates.slice(0, 5)) {
       // Separate the business name from a second column's document heading.
-      const candidate = line.replace(/\s+(?:(?:sales|tax)\s+)?(?:receipt|invoice)\s*$/i, '').trim();
+      const candidate = line.replace(/\s+(?:(?:sales|tax)\s+)?(?:receipt|invoice)\s*$/i, '').replace(/^(?:merchant|store)\s*:\s*/i,'').trim();
       if (/^\d+\s|\b(?:bill\s*to|ship\s*to|receipt\s*date|purchase\s*date)\b/i.test(candidate)) break;
       if (/^(?:receipt|invoice|welcome|date|total|subtotal|qty|description)\b/i.test(candidate)) continue;
-      if (/^[A-Za-z0-9][A-Za-z0-9 &'’.,()-]{2,99}$/.test(candidate) && (candidate.match(/[A-Za-z]/g) || []).length >= 3) { merchant = candidate; break; }
+      if (/^[\p{L}\p{N}][\p{L}\p{N} &'’.,()-]{2,99}$/u.test(candidate) && (candidate.match(/\p{L}/gu) || []).length >= 3) { merchant = candidate; break; }
     }
     if (!merchant) warnings.push('Merchant is uncertain; enter the store name.');
     const dateReview = receiptDateReview(text), purchaseDate = dateReview.purchaseDate;
     if (dateReview.inferredOrder) warnings.push(`Receipt date suggested using ${dateReview.inferredOrder === 'day-first' ? 'day/month/year' : 'month/day/year'} formatting from another labeled date. Verify it or choose the alternative below.`);
     if (!purchaseDate) warnings.push(dateReview.candidates.length ? 'Receipt date is ambiguous. Choose the correct interpretation below or enter it manually.' : 'Purchase date was not clearly identified; check the receipt and enter it if known.');
     if (/due\s*date|payment\s*(?:is\s*)?due/i.test(text)) warnings.push('Payment due dates are not purchase dates or return deadlines.');
-    const codes = new Set((text.match(/\b(?:USD|CAD|EUR|GBP|AUD|JPY|KWD)\b/g) || []));
+    const codes = new Set((text.match(/\b(?:USD|CAD|EUR|GBP|AUD|JPY|KWD)\b/gi) || []).map(code => code.toUpperCase()));
     if (/US\$/.test(text)) codes.add('USD');
     if (/€/.test(text)) codes.add('EUR');
     if (/£/.test(text)) codes.add('GBP');
@@ -107,13 +116,23 @@
     }
     if (!currency) warnings.push('Choose the currency. A $ symbol alone can mean USD, CAD, AUD, or another dollar currency.');
     const totals = [];
-    const totalLine = /^(?:(?:grand|sale)\s+)?total\s*:?\s*(?:(?:USD|CAD|EUR|GBP|AUD|JPY|KWD|US\$|[$€£])\s*)?(\d{1,9}(?:\.\d{1,3})?)\s*(?:USD|CAD|EUR|GBP|AUD|JPY|KWD)?$/i;
+    const label = '(?:(?:(?:grand|sale|net)\\s+)?total(?:\\s+paid)?|amount\\s+(?:due|paid)|balance\\s+due)';
+    const totalLine = new RegExp('^' + label + '\\s*:?\\s*(?:(?:USD|CAD|EUR|GBP|AUD|JPY|KWD|US\\$|[$€£])\\s*)?([0-9][0-9., ]{0,20})\\s*(?:USD|CAD|EUR|GBP|AUD|JPY|KWD)?$','i');
+    const normalizeMoney = raw => {
+      let value = raw.trim();
+      if (/^\d{1,3}( \d{3})+(?:[.,]\d{1,3})?$/.test(value)) value = value.replace(/ /g,'');
+      if (/^\d{1,3}(\.\d{3})+,\d{1,3}$/.test(value)) return value.replace(/\./g,'').replace(',','.');
+      if (/^\d+,\d{1,2}$/.test(value)) return value.replace(',','.');
+      if (/^\d{1,3}(,\d{3})+(?:\.\d{1,3})?$/.test(value) && !(currency === 'KWD' && /^\d+,\d{3}$/.test(value))) return value.replace(/,/g,'');
+      return /^\d+(?:\.\d{1,3})?$/.test(value) ? value : null;
+    };
     for (let index = 0; index < lines.length; index++) {
-      const line = /^(?:(?:grand|sale)\s+)?total\s*:?$/i.test(lines[index]) ? `${lines[index]} ${lines[index + 1] || ''}` : lines[index];
+      const line = new RegExp('^'+label+'\\s*:?$','i').test(lines[index]) ? `${lines[index]} ${lines[index + 1] || ''}` : lines[index];
       const match = line.match(totalLine);
-      if (match) totals.push(match[1]);
+      if (match) { const value = normalizeMoney(match[1]); if (value !== null) totals.push({ value, primary: !/^(?:amount\s+due|balance\s+due)/i.test(line) }); }
     }
-    let amount = totals.length === 1 ? totals[0] : null;
+    const uniqueTotals = [...new Set(totals.filter(item => !totals.some(other => other.primary) || item.primary).map(item => item.value))];
+    let amount = uniqueTotals.length === 1 ? uniqueTotals[0] : null;
     const precision = currency ? digits[currency] : 3;
     if (amount && !(new RegExp(`^(0|[1-9]\\d{0,8})${precision ? `(\\.\\d{1,${precision}})?` : ''}$`)).test(amount)) amount = null;
     if (!amount) warnings.push('Total is missing or uncertain; enter the final amount, not subtotal or cash tendered.');

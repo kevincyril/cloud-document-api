@@ -7,6 +7,7 @@ import { z } from "zod";
 import { config } from "../config";
 import { pool } from "../database";
 import { loginLimiter } from "../middleware/rate-limit.middleware";
+import { issueSession } from "../services/session";
 
 export const managedAuthRouter = Router();
 managedAuthRouter.get("/config", (_req, res) => {
@@ -72,8 +73,7 @@ managedAuthRouter.post("/exchange", loginLimiter, async (req, res) => {
       await client.query("COMMIT");
     } catch (error) { await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
-    const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, { algorithm: "HS256", expiresIn: "1h" });
-    res.json({ status: "success", token, user });
+    res.json({ status: "success", ...issueSession(res, user), user });
   } catch {
     console.error("Managed sign-in failed");
     res.status(503).json({ message: "Sign-in is temporarily unavailable. Please try again." });

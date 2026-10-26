@@ -244,9 +244,10 @@ to opt into this private regression check; deterministic tests use generic text.
 
 Cards show merchant, purchase date, exact amount/currency, saved deadline,
 days remaining, and distinct Due soon/Due today/Deadline passed/No deadline/Returned
-states. Sorting/filtering and counts are explicitly scoped to the current page
-of up to 50 records. No currency totals are combined. Dates refresh on tab focus
-and once a minute while visible. Returned is user-controlled in the edit form.
+states. Search and sorting/filtering cover all owned purchases, with 50 shown
+per page and account-wide summary counts. No currency totals are combined.
+Dates refresh on tab focus and once a minute while visible. Returned can be
+changed in the editor or through a revision-checked dashboard action.
 
 Every edit form starts with deadline confirmation unchecked. Purchase date/window
 changes show a new proposed calculation but leave the saved deadline unchanged
@@ -302,8 +303,8 @@ the user's own receipts, real phone, Safari, or personal calendar account.
 # Dashboard usability
 
 The dashboard supports case-insensitive search of merchant, description, and
-policy notes within the current page. Search combines with the status filter
-and sort. CSV export includes only the displayed view, without raw OCR or
+policy notes across all purchases. Search combines with the status filter
+and sort on the server. CSV export includes all matches (up to 10,000), without raw OCR or
 original files; amounts remain exact and currencies are retained per row.
 Spreadsheet formula prefixes are neutralized and embedded quotes/newlines are
 escaped. Downloaded files are private data and should be handled accordingly.
@@ -314,3 +315,12 @@ the browser's standard unsaved-changes warning where supported. A successful
 save resets the warning state, even if refreshing the lists later fails.
 Session expiry clears private state without retaining drafts. Drafts are not
 saved to localStorage or sessionStorage.
+
+Purchase deletion is owner- and revision-checked, asks for confirmation, and
+preserves receipt and policy documents. Mark returned/active only changes the
+status and revision; it preserves the explicitly confirmed deadline. The
+due-soon view uses the browser's calendar date and includes today through seven
+days ahead, excluding returned purchases. Parser review now supports written
+English dates, additional final-total labels, grouped and comma-decimal amounts,
+and Unicode business names. Ambiguities remain blank or highlighted per field;
+there are no invented confidence percentages or automatic policy claims.

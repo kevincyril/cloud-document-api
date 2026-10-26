@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import { cookieToken, validCsrf } from "../services/session";
 
 export function authenticate(
   req: Request,
@@ -8,10 +9,8 @@ export function authenticate(
 ): void {
   const authorizationHeader = req.headers.authorization;
 
-  if (
-    !authorizationHeader ||
-    !authorizationHeader.startsWith("Bearer ")
-  ) {
+  const token = authorizationHeader?.startsWith("Bearer ") ? authorizationHeader.substring(7) : !authorizationHeader ? cookieToken(req) : undefined;
+  if (!token) {
     res.status(401).json({
       status: "error",
       message: "Authentication token is required",
@@ -19,7 +18,6 @@ export function authenticate(
     return;
   }
 
-  const token = authorizationHeader.substring(7);
   const jwtSecret = process.env.JWT_SECRET;
 
   if (!jwtSecret) {
@@ -48,6 +46,9 @@ export function authenticate(
       return;
     }
 
+    if (!authorizationHeader && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !validCsrf(req.headers["x-csrf-token"], decoded.csrf)) {
+      res.status(403).json({ status: "error", message: "Session security check failed. Refresh and try again." }); return;
+    }
     req.user = {
       userId: decoded.userId,
       role: decoded.role,

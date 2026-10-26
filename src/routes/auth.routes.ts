@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { pool } from "../database";
 import jwt from "jsonwebtoken";
+import { issueSession, cookieToken, clearSession, validCsrf } from "../services/session";
 import { config } from "../config";
 import { managedAuthRouter } from "./managed-auth";
 import { loginLimiter, registrationLimiter } from "../middleware/rate-limit.middleware";
@@ -13,6 +14,33 @@ import {
 
 const router = Router();
 router.use(managedAuthRouter);
+router.get("/session", authenticate, async (req, res, next) => {
+  try {
+    const result = await pool.query("SELECT id,name,email,role FROM users WHERE id=$1", [req.user!.userId]);
+    if (!result.rowCount) { clearSession(res); res.status(401).json({ message: "Sign in again" }); return; }
+    const value = cookieToken(req);
+    if (!value) { res.status(401).json({ message: "No browser session" }); return; }
+    const claims = jwt.verify(value, process.env.JWT_SECRET!, { algorithms: ["HS256"] }) as jwt.JwtPayload;
+    if (claims.userId !== req.user!.userId) { res.status(401).json({ message: "Browser session does not match" }); return; }
+    res.json({ cookieSession: true, user: result.rows[0], csrfToken: claims.csrf, expiresAt: claims.exp! * 1000 });
+  } catch (error) { next(error); }
+});
+router.post("/logout", (req, res) => {
+  let crossOrigin = req.headers["sec-fetch-site"] === "cross-site";
+  if (req.headers.origin && config.APP_URL) {
+    try { crossOrigin ||= new URL(req.headers.origin).origin !== new URL(config.APP_URL).origin; }
+    catch { crossOrigin = true; }
+  }
+  if (crossOrigin) { res.status(403).json({ message: "Cross-site sign-out is not allowed" }); return; }
+  const value = cookieToken(req);
+  if (value) {
+    try {
+      const claims = jwt.verify(value, process.env.JWT_SECRET!, { algorithms: ["HS256"] }) as jwt.JwtPayload;
+      if (!validCsrf(req.headers["x-csrf-token"], claims.csrf)) { res.status(403).json({ message: "Session security check failed" }); return; }
+    } catch { /* Expired or invalid cookies can be discarded safely. */ }
+  }
+  clearSession(res); res.json({ status: "success" });
+});
 router.use(["/register", "/login"], (_req, res, next) => {
   if (config.AUTH_MODE === "supabase") { res.status(410).json({ message: "Use verified email or a configured sign-in provider." }); return; }
   next();
@@ -144,21 +172,12 @@ router.post("/login", loginLimiter, async (req, res) => {
       throw new Error("JWT_SECRET is not configured");
     }
 
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        role: user.role,
-      },
-      jwtSecret,
-      {
-        expiresIn: "1h",
-      }
-    );
+    const session = issueSession(res, user);
 
     res.status(200).json({
       status: "success",
       message: "Login successful",
-      token,
+      ...session,
       user: {
         id: user.id,
         name: user.name,

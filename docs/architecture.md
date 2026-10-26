@@ -31,10 +31,12 @@ issues a one-hour JWT at login. `src/middleware/auth.middleware.ts` verifies the
 signature and expected claims. Every document lookup includes the verified user
 ID; guessing another user's document UUID still returns 404.
 
-The UI keeps the JWT only in memory and sends it in the Authorization header.
-Refresh and sign-out discard it. An expiry timer and protected 401 return to
-sign-in and clear document state. Logout does not revoke an already issued token
-on the server. Browser secrets such as privileged Supabase keys never appear in
+Managed sign-in verifies identities with Supabase Auth and links them to stable
+application ownership IDs. Browser sessions use an HttpOnly, SameSite=Strict
+cookie (Secure in production) and a CSRF token for writes. Refresh restores the
+session until its original one-hour expiry; sign-out clears the cookie. API
+bearer tokens remain supported. An expiry timer and protected 401 clear private
+state. Logout does not revoke a copied token before expiry. Privileged Supabase keys never appear in
 the public files. Extracted text and filenames render using `textContent` rather
 than HTML, so a document cannot inject markup into the page.
 

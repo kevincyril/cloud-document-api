@@ -55,9 +55,10 @@ as search results, not generated answers. Reprocessing clears the current browse
 search results because they may be stale. Text without extractable words shows
 no-OCR guidance. All text/filenames/excerpts use textContent rather than innerHTML.
 
-The existing in-memory JWT strategy remains: no local/session storage, refresh
-signs out, and expiry/protected 401 clears documents and search results. This
-reduces token persistence but does not prevent active XSS or revoke copied JWTs.
+Browser sessions now use HttpOnly cookies and survive refresh within the
+one-hour lifetime. Cookie writes require CSRF protection. Tokens are not stored
+in local/session storage, and expiry/protected 401 clears private UI state.
+This does not prevent active XSS or revoke copied JWTs before their expiry.
 Privileged Supabase keys and database credentials stay on the server.
 
 The local browser test registers/logs in, uploads/processes PDF and text, searches,

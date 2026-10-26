@@ -45,6 +45,22 @@ test('fresh schema migrations and complete API behavior', { timeout: 45000 }, as
       return { status: response.status, body, headers: response.headers };
     }
     const password = randomUUID();
+    await t.test('browser cookies are HttpOnly, survive session reads, and require CSRF for writes', async () => {
+      const email = `session-${randomUUID()}@example.com`;
+      await request('/auth/register', { method: 'POST', json: { name: 'Session test', email, password } });
+      const login = await request('/auth/login', { method: 'POST', json: { email, password } });
+      const cookie = login.headers.get('set-cookie');
+      assert.match(cookie, /HttpOnly/i); assert.match(cookie, /SameSite=Strict/i);
+      const headers = { Cookie: cookie.split(';')[0] };
+      const restored = await request('/auth/session', { headers });
+      assert.equal(restored.status, 200); assert.equal(restored.body.user.email, email);
+      assert.ok(!('token' in restored.body));
+      assert.equal((await request('/purchases', { method: 'POST', headers, json: {} })).status, 403);
+      assert.equal((await request('/auth/logout', { method: 'POST', headers })).status, 403);
+      assert.equal((await request('/auth/logout', { method: 'POST', headers: { 'Sec-Fetch-Site': 'cross-site' } })).status, 403);
+      const logout = await request('/auth/logout', { method: 'POST', headers: { ...headers, 'X-CSRF-Token': restored.body.csrfToken } });
+      assert.equal(logout.status, 200); assert.match(logout.headers.get('set-cookie'), /Expires=Thu, 01 Jan 1970/i);
+    });
     const users = [];
     await t.test('register, login, duplicate registration, and role isolation', async () => {
       for (let i = 0; i < 2; i++) {
@@ -164,6 +180,39 @@ test('fresh schema migrations and complete API behavior', { timeout: 45000 }, as
       const workerCsp = (await fetch(base + '/app/ocr/worker.min.js')).headers.get('content-security-policy');
       assert.ok(workerCsp.includes('wasm-unsafe-eval'));
       assert.equal((await fetch(base + '/app/ocr/package.json')).status, 404);
+    });
+    await t.test('global purchase search, export, deadline actions, and guarded deletion', async () => {
+      await pool.query(`INSERT INTO purchases(user_id,merchant,purchase_date,description,deadline_source) SELECT $1,'A filler '||lpad(n::text,3,'0'),'2026-10-01'::date,'','none' FROM generate_series(1,65) n`, [users[0].id]);
+      await pool.query("INSERT INTO purchases(user_id,merchant,purchase_date,description,deadline_source) VALUES($1,'ZZ Hidden Needle','2026-10-01','100% _ literal','none')", [users[0].id]);
+      const page = await request('/purchases?sort=merchant&limit=50', { token: users[0].token });
+      assert.equal(page.body.purchases.some(p => p.merchant === 'ZZ Hidden Needle'), false);
+      assert.equal(page.body.pagination.hasMore, true);
+      const global = await request('/purchases?q=Hidden%20Needle', { token: users[0].token });
+      assert.equal(global.body.pagination.total, 1); assert.equal(global.body.purchases[0].merchant, 'ZZ Hidden Needle');
+      assert.equal((await request('/purchases?q=Hidden%20Needle', { token: users[1].token })).body.pagination.total, 0);
+      for (const query of ['%25', '_']) assert.equal((await request('/purchases?q=' + query, { token: users[0].token })).body.pagination.total, 1);
+      const csv = await fetch(base + '/purchases/export?q=Hidden%20Needle', { headers: { Authorization: 'Bearer ' + users[0].token } });
+      assert.equal(csv.status, 200); assert.match(await csv.text(), /ZZ Hidden Needle/);
+      const isolatedCsv = await fetch(base + '/purchases/export?q=Hidden%20Needle', { headers: { Authorization: 'Bearer ' + users[1].token } });
+      assert.ok(!(await isolatedCsv.text()).includes('ZZ Hidden Needle'));
+      assert.ok(page.body.summary.active > 50);
+      const input = { merchant: 'Due-specific', purchaseDate: '2026-10-24', amount: null, currency: null, receiptDocumentId: textId, deadline: { source: 'manual', date: '2026-10-26', confirmed: true } };
+      const created = (await request('/purchases', { method: 'POST', token: users[0].token, json: input })).body.purchase;
+      const route = `/purchases/${created.id}`;
+      const due = await request('/purchases?status=due_soon&today=2026-10-25', { token: users[0].token });
+      assert.ok(due.body.purchases.some(p => p.id === created.id));
+      assert.equal((await request(route + '/returned', { method: 'PATCH', token: users[1].token, json: { revision: 1, returned: true } })).status, 404);
+      const changed = await request(route + '/returned', { method: 'PATCH', token: users[0].token, json: { revision: 1, returned: true } });
+      assert.equal(changed.status, 200); assert.equal(changed.body.purchase.deadline_confirmed_at, created.deadline_confirmed_at);
+      assert.equal((await request(route + '/returned', { method: 'PATCH', token: users[0].token, json: { revision: 1, returned: false } })).status, 409);
+      assert.equal((await request(route, { method: 'DELETE', token: users[1].token, json: { revision: 2 } })).status, 404);
+      assert.equal((await request(route, { method: 'DELETE', token: users[0].token, json: { revision: 1 } })).status, 409);
+      assert.equal((await request(route, { method: 'DELETE', token: users[0].token, json: { revision: 2 } })).status, 200);
+      assert.equal((await request(route, { token: users[0].token })).status, 404);
+      assert.equal((await request('/documents/' + textId, { token: users[0].token })).status, 200);
+      await pool.query(`INSERT INTO purchases(user_id,merchant,deadline_source) SELECT $1,'Export limit fixture '||n,'none' FROM generate_series(1,10001) n`, [users[0].id]);
+      const capped = await request('/purchases/export?q=Export%20limit%20fixture', { token: users[0].token });
+      assert.equal(capped.status, 422);
     });
     await t.test('PDF extraction round trip and damaged PDF failure', async () => {
       const uploaded = await upload(createPdf(), 'application/pdf', 'fixture.pdf');

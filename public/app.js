@@ -1,13 +1,28 @@
 'use strict';
 const $ = id => document.getElementById(id);
 let token = '', generation = 0, registration = false, offset = 0, selected = null, busy = false, expiryTimer, pollTimer;
+let csrfToken = '', sessionEnd = Promise.resolve();
 const limit = 20;
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await window.ManagedAuth.ready;
+    if (token) return;
+    const current = generation;
+    const response = await fetch('/auth/session', { credentials: 'same-origin', cache: 'no-store' });
+    if (current !== generation || token || busy || response.status === 401) return;
+    if (!response.ok) throw new Error('Unable to restore your session. Refresh to try again.');
+    const body = await response.json();
+    await action('Restoring your session…', () => completeSignIn(body));
+  } catch (error) { notice(error.message, true); }
+});
 let searchQuery = '', searchOffset = 0, searchHasMore = false;
 function notice(message = '', error = false) {
   $('notice').textContent = message; $('notice').classList.toggle('error', error);
   if (error && message) $('notice').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 function signOut(message = 'Signed out.') {
+  const previousCsrf = csrfToken; csrfToken = '';
+  sessionEnd = fetch('/auth/logout', { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'X-CSRF-Token': previousCsrf }, signal: AbortSignal.timeout(10000) }).then(response => { if (!response.ok) throw new Error(); }).catch(() => notice('Private data cleared from this page, but server sign-out could not complete. Reconnect and sign out again before leaving a shared device.', true));
   window.ManagedAuth?.clear();
   window.ReceiptTracker?.reset();
   generation++; token = ''; selected = null; clearTimeout(expiryTimer); clearTimeout(pollTimer);
@@ -19,7 +34,8 @@ function signOut(message = 'Signed out.') {
 async function request(path, options = {}, binary = false) {
   const current = generation;
   const headers = new Headers(options.headers);
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (token && token !== 'cookie') headers.set('Authorization', `Bearer ${token}`);
+  if (token === 'cookie' && !['GET', 'HEAD'].includes((options.method || 'GET').toUpperCase())) headers.set('X-CSRF-Token', csrfToken);
   let response;
   try { response = await fetch(path, { ...options, headers, cache: 'no-store' }); }
   catch { throw new Error('Connection interrupted. Refresh documents to check whether your action completed before retrying.'); }
@@ -102,11 +118,12 @@ $('auth-toggle').onclick = () => {
   $('password').minLength = registration ? 8 : 1; $('password').autocomplete = registration ? 'new-password' : 'current-password';
   $('auth-title').textContent = $('auth-submit').textContent = registration ? 'Create account' : 'Sign in';
   $('auth-toggle').textContent = registration ? 'Already registered? Sign in' : 'New here? Create an account';
-  $('password-help').textContent = registration ? 'Use at least 8 characters, up to 72 UTF-8 bytes.' : 'Your session lasts up to one hour. Refreshing signs you out.'; notice();
+  $('password-help').textContent = registration ? 'Use at least 8 characters, up to 72 UTF-8 bytes.' : 'Stay signed in for up to one hour, including page refreshes. Sign out on shared devices.'; notice();
 };
 $('auth-form').onsubmit = event => {
   event.preventDefault(); action(registration ? 'Creating account…' : 'Signing in…', async () => {
     await window.ManagedAuth.ready;
+    await sessionEnd;
     if (window.ManagedAuth.enabled) { await window.ManagedAuth.submit(registration); return; }
     const email = $('email').value.trim(), password = $('password').value;
     if (new TextEncoder().encode(password).length > 72) throw new Error('Password must be at most 72 UTF-8 bytes.');
@@ -116,11 +133,11 @@ $('auth-form').onsubmit = event => {
   });
 };
 async function completeSignIn(body) {
-    token = body.token; offset = 0; $('auth-form').reset();
+    token = body.cookieSession ? 'cookie' : body.token; csrfToken = body.csrfToken || ''; offset = 0; $('auth-form').reset();
     $('auth').hidden = true; $('workspace').hidden = false; $('logout').hidden = false; $('greeting').textContent = `WELCOME, ${body.user.name}`;
     $('account-label').textContent = body.user.email; $('account-label').hidden = false;
-    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    expiryTimer = setTimeout(() => signOut('Your session expired. Sign in again.'), Math.max(0, payload.exp * 1000 - Date.now()));
+    const expiresAt = body.expiresAt || JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000;
+    clearTimeout(expiryTimer); expiryTimer = setTimeout(() => signOut('Your session expired. Sign in again.'), Math.max(0, expiresAt - Date.now()));
     await list(); await window.ReceiptTracker?.onLogin(); notice('Signed in. Your return desk is ready.');
 }
 $('logout').onclick = () => { if (window.ReceiptTracker?.canDiscard() !== false) signOut(); };

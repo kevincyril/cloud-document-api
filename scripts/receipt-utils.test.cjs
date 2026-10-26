@@ -93,3 +93,15 @@ test('purchase CSV preserves exact money, quotes and Unicode while preventing sp
   assert.ok(csv.includes('"東京"'));
   assert.ok(csv.includes('"No total","","",""'));
 });
+test('additional receipt layouts normalize totals and explicit dates without guessing conflicts', () => {
+  const european = U.parseReceipt('CAFÉ LUMIÈRE\nReceipt Date: 21 October 2026\nNET TOTAL EUR 1.234,56');
+  assert.equal(european.merchant, 'CAFÉ LUMIÈRE'); assert.equal(european.purchaseDate,'2026-10-21'); assert.equal(european.amount,'1234.56');
+  assert.equal(U.parseReceipt('Merchant: Example Store\nPurchase Date: Oct 21, 2026\nTOTAL PAID USD 1,234.56').amount,'1234.56');
+  assert.equal(U.parseReceipt('Example Store\nReceipt Date:\nOctober 21st, 2026\nAMOUNT DUE USD 12.50').purchaseDate,'2026-10-21');
+  assert.equal(U.parseReceipt('Example Store\nTOTAL USD 12.50\nBALANCE DUE USD 0.00').amount,'12.50');
+  assert.equal(U.parseReceipt('Example Store\nTOTAL EUR 12,50\nTOTAL EUR 12,50').amount,'12.50');
+  assert.equal(U.parseReceipt('Example Store\nTOTAL EUR 12,50\nTOTAL EUR 15,50').amount,null);
+  assert.equal(U.parseReceipt('Example Store\nReceipt Date: February 30, 2026\nTOTAL USD 12.50').purchaseDate,null);
+  assert.equal(U.parseReceipt('Example Store\nReceipt Date: 2026/10/21\nTOTAL USD 12.50').purchaseDate,'2026-10-21');
+  assert.equal(U.parseReceipt('Example Store\nTOTAL KWD 1,234').amount,null);
+});

@@ -4,14 +4,15 @@
 
 **Source:** https://github.com/kevincyril/cloud-document-api
 
-The landing page is public; create your own account to try the tracker. Receipts
-and purchases are private to that account. Refreshing the page signs you out
-because the JWT is held only in browser memory.
+The landing page is public; live sign-in is currently limited to invited testers.
+Receipts and purchases are private to each account. An HttpOnly cookie keeps
+the session signed in across refreshes for up to one hour. Email delivery uses
+a test sender; public email-code signup is not open yet.
 
 ## Two-minute demo
 
-1. Open the live website and choose **New here? Create an account**. Register with
-   a unique email and a password of at least eight characters.
+1. Open the live website and sign in using Google or an email code with an
+   invited account. Local development can also use the legacy password flow.
 2. Choose **Try a sample receipt**. This is a clearly labeled synthetic image,
    not a real transaction. It uses the same private upload and actual browser OCR
    as your own JPEG/PNG files.

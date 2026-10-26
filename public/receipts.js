@@ -1,8 +1,9 @@
 'use strict';
 (() => {
   const U = window.ReceiptUtils;
-  let purchases = [], visiblePurchases = [], baseline = '', pageOffset = 0, hasMore = false, draft = null, previewUrl = '', cancelOcr = null, pendingSample = false;
+  let purchases = [], visiblePurchases = [], summary = { active: 0, dueSoon: 0, returned: 0 }, total = 0, loadSerial = 0, filterPending = false, filterTimer, baseline = '', pageOffset = 0, hasMore = false, draft = null, previewUrl = '', cancelOcr = null, pendingSample = false;
   const pageSize = 50;
+  let loadedDay = '';
   function snapshot() {
     return JSON.stringify({ fields: Array.from($('purchase-form').elements).filter(node => node.id && !['deadline-confirm', 'purchase-fields'].includes(node.id) && ['INPUT', 'SELECT', 'TEXTAREA'].includes(node.tagName)).map(node => [node.id, node.type === 'checkbox' ? node.checked : node.type === 'file' ? Array.from(node.files).map(file => [file.name, file.size, file.lastModified]) : node.value]), receipt: draft?.receiptId, ocr: draft?.ocr });
   }
@@ -19,6 +20,8 @@
   }
   function reset() {
     cancelOcr?.(); clearPreview(); draft = null; purchases = []; visiblePurchases = []; baseline = ''; pageOffset = 0; hasMore = false;
+    clearTimeout(filterTimer); loadSerial++; filterPending = false; total = 0; summary = { active: 0, dueSoon: 0, returned: 0 };
+    loadedDay = '';
     $('purchase-query').value = ''; $('purchase-filter').value = 'all'; $('purchase-sort').value = 'deadline';
     $('purchase-editor').hidden = true; $('purchase-form').reset(); $('receipt-upload-form').reset();
     $('purchase-list').replaceChildren(); $('raw-ocr').textContent = ''; $('ocr-suggestions').textContent = '';
@@ -27,15 +30,17 @@
     $('receipt-retained').textContent = ''; $('review-warnings').textContent = '';
     $('receipt-date-choices').replaceChildren(); $('receipt-date-choices').hidden = true;
     for (const id of ['count-open', 'count-soon', 'count-returned']) $(id).textContent = '0';
+    reviewFields();
   }
   function sync() {
+    reviewFields();
     const state = !draft ? '' : isDirty() ? 'Unsaved changes' : draft.id ? 'All changes saved' : 'No changes yet';
     if ($('purchase-draft-status').textContent !== state) $('purchase-draft-status').textContent = state;
     $('purchase-currency').required = $('purchase-amount').value.trim() !== '';
     $('purchase-amount').required = $('purchase-currency').value !== '';
     $('purchase-previous').disabled = busy || pageOffset === 0;
     $('purchase-next').disabled = busy || !hasMore || pageOffset >= 10000;
-    $('purchase-export').disabled = busy || !visiblePurchases.length;
+    $('purchase-export').disabled = busy || filterPending || !total;
     $('purchase-query-clear').disabled = busy || !$('purchase-query').value;
     $('receipt-download').hidden = !draft?.receiptId;
     $('receipt-unlink').hidden = !draft?.receiptId;
@@ -50,20 +55,17 @@
   function render() {
     const day = U.today();
     const annotated = purchases.map(p => ({ ...p, state: U.status(p, day) }));
-    $('count-open').textContent = annotated.filter(p => !p.returned).length;
-    $('count-soon').textContent = annotated.filter(p => !p.returned && p.state.days !== null && p.state.days >= 0 && p.state.days <= 7).length;
-    $('count-returned').textContent = annotated.filter(p => p.returned).length;
-    const filter = $('purchase-filter').value;
-    const query = $('purchase-query').value.trim().toLocaleLowerCase();
-    const shown = annotated.filter(p => (filter === 'all' || (filter === 'active' ? !p.returned : filter === 'due_soon' ? !p.returned && p.state.days !== null && p.state.days >= 0 && p.state.days <= 7 : p.state.key === filter)) && (!query || [p.merchant, p.description, p.policy_notes].some(value => String(value || '').toLocaleLowerCase().includes(query))));
-    const sort = $('purchase-sort').value;
-    shown.sort((a, b) => sort === 'merchant' ? a.merchant.localeCompare(b.merchant) : sort === 'newest' ? b.created_at.localeCompare(a.created_at) : (a.deadline_date ?? '9999-99-99').localeCompare(b.deadline_date ?? '9999-99-99') || a.id.localeCompare(b.id));
+    $('count-open').textContent = summary.active;
+    $('count-soon').textContent = summary.dueSoon;
+    $('count-returned').textContent = summary.returned;
+    const shown = annotated;
     visiblePurchases = shown;
     $('purchase-list').replaceChildren();
     if (!shown.length) {
       const empty = element('section', '', 'card purchase-empty');
-      empty.append(element('span', '↩', 'empty-mark'), element('h3', purchases.length ? 'Nothing in this view' : pageOffset ? 'No more purchases' : 'A fresh start for your receipts'),
-        element('p', purchases.length ? 'Clear your search or change the status filter to see other purchases on this page.' : 'Upload a receipt or try the synthetic sample. Review the details, confirm a deadline, and it will appear here.'));
+      const filtered = $('purchase-query').value.trim() || $('purchase-filter').value !== 'all';
+      empty.append(element('span', '↩', 'empty-mark'), element('h3', filtered ? 'No matching purchases' : pageOffset ? 'No more purchases' : 'A fresh start for your receipts'),
+        element('p', filtered ? 'Clear your search or change the status filter to see other purchases.' : 'Upload a receipt or try the synthetic sample. Review the details, confirm a deadline, and it will appear here.'));
       $('purchase-list').append(empty);
     }
     for (const p of shown) {
@@ -74,18 +76,39 @@
       const date = element('div', '', 'purchase-deadline'); date.append(element('strong', remaining), element('small', p.deadline_date ? `User-confirmed · ${p.deadline_date}` : 'No store policy inferred')); card.append(date);
       const buttons = element('div', '', 'actions');
       const edit = element('button', 'Review / edit'); edit.onclick = () => action('Opening purchase…', () => openPurchase(p.id)); buttons.append(edit);
+      const returned = element('button', p.returned ? 'Mark active' : 'Mark returned'); returned.onclick = () => action('Updating return status…', async () => {
+        if (draft?.id === p.id && isDirty()) throw new Error('Save or close your unsaved edits before changing this purchase from the dashboard.');
+        const result = await request(`/purchases/${p.id}/returned`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: p.revision, returned: !p.returned }) });
+        if (draft?.id === p.id) { draft.revision = result.purchase.revision; $('purchase-returned').checked = result.purchase.returned; baseline = snapshot(); }
+        await loadPurchases(); notice(result.purchase.returned ? 'Purchase marked returned.' : 'Purchase marked active.');
+      }); buttons.append(returned);
+      const remove = element('button', 'Delete purchase', 'danger'); remove.onclick = () => action('Deleting purchase…', async () => {
+        if (!window.confirm(`Delete purchase details for “${p.merchant}”? This cannot be undone. Receipt and policy originals will stay in your private document library.`)) { notice('Purchase kept.'); return; }
+        await request(`/purchases/${p.id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: p.revision }) });
+        if (draft?.id === p.id) { draft = null; clearPreview(); $('purchase-editor').hidden = true; $('purchase-form').reset(); }
+        if (pageOffset && purchases.length === 1) pageOffset = Math.max(0, pageOffset - pageSize);
+        await loadPurchases(); notice('Purchase details deleted. Original files remain in your private document library.');
+      }); buttons.append(remove);
       if (p.deadline_date) { const cal = element('button', 'Add to calendar'); cal.onclick = () => action('Preparing calendar…', () => calendar(p.id)); buttons.append(cal); }
       card.append(buttons); $('purchase-list').append(card);
     }
-    $('purchase-list-status').textContent = `${shown.length} purchase${shown.length === 1 ? '' : 's'} shown on this page.`;
+    $('purchase-list-status').textContent = `${total} matching purchase${total === 1 ? '' : 's'} · ${shown.length} shown on this page.`;
     $('purchase-page').textContent = `Page ${pageOffset / pageSize + 1}`; sync();
   }
   async function loadPurchases() {
+    const serial = ++loadSerial, params = purchaseParams();
     $('purchase-list-status').textContent = 'Loading your purchases…';
     try {
-      const body = await request(`/purchases?limit=${pageSize}&offset=${pageOffset}`);
-      purchases = body.purchases; hasMore = purchases.length === pageSize; render();
+      const body = await request(`/purchases?${params}`);
+      if (serial !== loadSerial || params.toString() !== purchaseParams().toString()) return;
+      purchases = body.purchases; hasMore = body.pagination.hasMore; total = body.pagination.total; summary = body.summary; loadedDay = params.get('today'); filterPending = false; render();
     } catch (error) { $('purchase-list-status').textContent = 'Purchases could not be refreshed. Try Refresh purchases.'; throw error; }
+  }
+  function purchaseParams() { return new URLSearchParams({ limit: String(pageSize), offset: String(pageOffset), q: $('purchase-query').value.trim(), status: $('purchase-filter').value, sort: $('purchase-sort').value, today: U.today() }); }
+  function changeView() {
+    pageOffset = 0; filterPending = true; clearTimeout(filterTimer); sync();
+    const run = () => { if (busy) { filterTimer = setTimeout(run, 150); return; } action('Finding purchases…', async () => { try { await loadPurchases(); notice(); } finally { filterPending = false; } }); };
+    filterTimer = setTimeout(run, 250);
   }
   async function policyOptions(selectedId = null) {
     const { documents } = await request('/documents?limit=100&offset=0');
@@ -96,6 +119,7 @@
     $('policy-help').textContent = 'Choose from your 100 most recent private documents, or attach a file. Policy interpretation is manual.';
   }
   function reviewText() {
+    reviewFields();
     $('raw-ocr').textContent = draft?.ocr || 'No OCR text. Manual entry is available.';
     $('ocr-suggestions').textContent = JSON.stringify(draft?.suggestions || {}, null, 2);
     $('review-warnings').textContent = draft?.suggestions?.warnings?.join(' ') || 'Review the details against the original. You control every field.';
@@ -106,6 +130,17 @@
       const button = element('button', `${readable} (${date})`); button.type = 'button'; button.dataset.date = date;
       button.onclick = () => { $('purchase-date').value = date; updateDeadline(); $('purchase-date').focus(); };
       $('receipt-date-choices').append(button);
+    }
+  }
+  function reviewFields() {
+    for (const [id, key, evidence] of [['purchase-merchant','merchant',/merchant.*uncertain/i], ['purchase-date','purchaseDate',/date.*(?:ambiguous|suggested|not clearly)|day\/month|month\/day/i], ['purchase-amount','amount',/total.*(?:missing|uncertain)/i], ['purchase-currency','currency',/currency|USD suggested/i]]) {
+      const field = $(id), note = $(id + '-review');
+      if (!draft?.ocr) { note.textContent = ''; field.classList.remove('needs-review'); continue; }
+      const original = draft.suggestions?.[key], value = field.value.trim();
+      const edited = value && value !== String(original || '');
+      const uncertain = !original || (draft.suggestions?.warnings || []).some(warning => evidence.test(warning));
+      note.textContent = edited ? 'Entered or corrected by you. Check the original.' : !value ? 'Not identified reliably. Enter it if known.' : uncertain ? 'Uncertain suggestion. Check the original carefully.' : 'Suggested from receipt. Check against the original.';
+      field.classList.toggle('needs-review', !edited && uncertain);
     }
   }
   function updateDeadline(resetConfirmation = true) {
@@ -292,19 +327,25 @@
   $('purchase-amount').addEventListener('input', sync);
   $('purchase-currency').addEventListener('change', sync);
   $('purchase-refresh').onclick = () => action('Refreshing purchases…', async () => { await loadPurchases(); notice('Purchases refreshed.'); });
-  $('purchase-filter').onchange = render; $('purchase-sort').onchange = render;
+  $('purchase-filter').onchange = changeView; $('purchase-sort').onchange = changeView;
   $('purchase-form').addEventListener('input', sync);
   $('purchase-form').addEventListener('change', sync);
-  $('purchase-query').oninput = render;
-  $('purchase-query-clear').onclick = () => { $('purchase-query').value = ''; render(); $('purchase-query').focus(); };
+  $('purchase-query').oninput = changeView;
+  $('purchase-query-clear').onclick = () => { $('purchase-query').value = ''; changeView(); $('purchase-query').focus(); };
+  $('show-due-soon').onclick = () => { $('purchase-filter').value = 'due_soon'; changeView(); $('purchase-list-status').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
   $('purchase-export').onclick = () => action('Preparing purchase export…', async () => {
-    if (!visiblePurchases.length) throw new Error('There are no purchases in this view to export.');
-    download(new Blob([U.purchasesCsv(visiblePurchases)], { type: 'text/csv;charset=utf-8' }), `return-keeper-purchases-${U.today()}.csv`);
-    notice(`Exported ${visiblePurchases.length} purchase${visiblePurchases.length === 1 ? '' : 's'} from this page and current filters. Keep your downloaded file private.`);
+    const blob = await request(`/purchases/export?${purchaseParams()}`, {}, true);
+    download(blob, `return-keeper-purchases-${U.today()}.csv`);
+    notice('Exported all purchases matching your current search and status filter. Keep the downloaded file private.');
   });
   for (const [id, delta] of [['purchase-previous', -pageSize], ['purchase-next', pageSize]]) $(id).onclick = () => action('Loading purchases…', async () => { pageOffset = Math.max(0, Math.min(10000, pageOffset + delta)); await loadPurchases(); notice(); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && token) render(); });
-  setInterval(() => { if (token && !document.hidden) render(); }, 60000);
+  function refreshDates() {
+    if (document.hidden || !token) return;
+    if (loadedDay !== U.today() && !busy) action('Updating deadline dates…', loadPurchases);
+    else render();
+  }
+  document.addEventListener('visibilitychange', refreshDates);
+  setInterval(refreshDates, 60000);
   window.addEventListener('pagehide', () => { cancelOcr?.(); clearPreview(); });
   sync();
 })();

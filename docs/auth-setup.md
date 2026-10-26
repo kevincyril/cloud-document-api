@@ -87,7 +87,7 @@ The existing service is configured directly through Render environment variables
 
 Existing users first authenticate with a verified identity using their existing email, then prove ownership with their previous workspace password. This preserves IDs, documents, and purchases. Matching email alone never links accounts. If the old password is lost, manual ownership recovery is needed; do not delete the old account or automatically link it by email.
 
-Sessions remain in browser memory and last up to one hour. Refreshing signs out. Only PKCE flow verifiers, not access/refresh tokens, are stored in sessionStorage for up to 15 minutes for redirect flows. Email codes are entered directly into the app and cleared after each attempt. Application tokens already issued remain valid until their one-hour expiry after provider logout/revocation or a mode change.
+Browser sessions last up to one hour and survive refresh using an HttpOnly, SameSite=Strict cookie, with Secure and the `__Host-` prefix in production. Authenticated writes require a CSRF header, and sign-out clears the cookie. `/auth/session` restores the public profile, expiry, and CSRF token without returning the login JWT. Application login/exchange responses still provide bearer tokens for API compatibility, but the browser uses the cookie instead of retaining that JWT. Only PKCE verifiers, not access/refresh tokens, are stored in sessionStorage for redirect flows. Email codes are cleared after each attempt. Copied application tokens remain valid until expiry; cookie removal does not revoke a copied token. Sessions do not extend automatically beyond one hour.
 
 ## Apple and release checks
 
