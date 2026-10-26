@@ -5,6 +5,7 @@ Google and email authentication use Supabase in a restricted preview. Email acco
 ## Current rollout status
 
 - Live app: https://cloud-document-api.onrender.com/app/.
+- No-login guest preview: https://cloud-document-api.onrender.com/app/preview.html. Visitors can run receipt OCR and calculate a deadline locally in their browser. This page has no account session, upload, or purchase-saving API calls; account access remains restricted.
 - Email-code login was introduced in release `28afd2f`, Render deploy `dep-dbfbaeqjnfac738ok9g0`.
 - Password setup, password sign-in, and code-based recovery were deployed in release `3ea183e`, Render deploy `dep-dbfsnud9el5s738hdjkg`. On October 26, 2026, the owner confirmed that password setup and recovery both work and receipts remain intact.
 - `AUTH_EMAIL_ENABLED=true`, `AUTH_PROVIDERS=google`, `AUTH_PUBLIC_ENABLED=false`; the tester allowlist is configured privately in Render.

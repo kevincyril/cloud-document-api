@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Try Return Keeper — guest preview</title><link rel="stylesheet" href="/app/style.css">
+  <script src="/app/receipt-utils.js" defer></script><script src="/app/preview.js" defer></script>
+</head>
+<body>
+  <header><a class="brand" href="/app/">↩ Return Keeper</a><span class="tag">Guest preview</span><a href="/app/">Sign in</a></header>
+  <main>
+    <section class="intro"><p class="eyebrow">TRY IT WITHOUT AN ACCOUNT</p><h1>One receipt.<br>See it work.</h1><p>Read a receipt, review the suggestions, and try a return deadline. No sign-in required.</p></section>
+    <p class="review-note">Guest mode: your receipt and edits stay in this browser tab. Nothing is uploaded or saved to an account. Refreshing or leaving clears the preview. Sign-in is currently invitation-only.</p>
+    <section class="card"><h2>Choose a receipt</h2><p>Try our synthetic sample or choose your own JPEG/PNG. Printed English receipts work best. OCR may be wrong; review every field.</p>
+      <form id="guest-upload"><label>Receipt image<input id="guest-file" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" required></label><button id="guest-read" class="primary">Read my receipt</button></form>
+      <div class="actions"><button id="guest-sample" type="button">Try a sample receipt</button><button id="guest-clear" type="button">Clear preview</button><button id="guest-cancel" type="button" hidden>Cancel reading</button></div><p class="muted">Maximum 5 MiB, 12 megapixels, 8000 pixels per side.</p>
+    </section>
+    <p id="notice" role="status" aria-live="polite"></p>
+    <section id="guest-results" class="card" hidden><h2>Review your receipt</h2><p id="guest-warnings" class="review-note"></p>
+      <div class="editor-grid"><aside class="receipt-pane"><img id="guest-image" alt="Receipt selected for this guest preview"><details><summary>OCR text & original suggestions</summary><pre id="guest-ocr" tabindex="0"></pre><pre id="guest-suggestions" tabindex="0"></pre></details></aside>
+      <div><label>Merchant<input id="guest-merchant" maxlength="200"></label><label>Purchase date<input id="guest-date" type="date"></label><div class="form-row"><label>Total<input id="guest-amount" inputmode="decimal" maxlength="20"></label><label>Currency<select id="guest-currency"><option value="">Choose if known</option><option>USD</option><option>CAD</option><option>EUR</option><option>GBP</option><option>AUD</option><option>JPY</option><option>KWD</option></select></label></div><p class="muted">A $ symbol alone does not identify a currency. Select the currency you know was used.</p>
+        <div class="deadline-box"><h3>Try a return deadline</h3><p class="muted">Enter a return window from a policy you have checked. No store policy is inferred.</p><label>Return window in days<input id="guest-days" type="number" min="1" max="3650" step="1"></label><label>Does purchase day count?<select id="guest-counts"><option value="false">No — add the full window</option><option value="true">Yes — purchase day is day 1</option></select></label><p id="guest-deadline" role="status">Enter a purchase date and return window to calculate a preview.</p></div>
+        <p>Want to keep your receipts and purchases? <a href="/app/">Sign in with an invited account</a>.</p>
+      </div></div>
+    </section>
+  </main><footer>Return Keeper · Guest receipts are processed locally and are not saved.</footer>
+</body>
+</html>

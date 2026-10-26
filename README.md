@@ -6,10 +6,16 @@ combines browser-based OCR with a private document library and a searchable
 purchase dashboard, turning receipt images into records users can verify and save.
 
 **[View the live project](https://cloud-document-api.onrender.com/app/)** ·
+[Try without signing in](https://cloud-document-api.onrender.com/app/preview.html) ·
 [Demo walkthrough & screenshots](docs/demo.md) ·
 [API documentation](docs/api.md)
 
-The live project is an **invitation-only preview**. Google sign-in requires an
+The **guest preview needs no account**: try a sample or your own receipt, run
+browser OCR, edit the suggestions, and calculate a return deadline. Guest images
+and results stay in the tab and are cleared when you leave or refresh; saving
+and the private dashboard require sign-in.
+
+Account access is an **invitation-only preview**. Google sign-in requires an
 invited account, and email/password login and code-based password recovery remain
 restricted to the owner's test address. Public signup is disabled.
 
@@ -64,12 +70,13 @@ public email delivery needs a verified sender. Follow the
 Open the [live website](https://cloud-document-api.onrender.com/app/) and follow
 the [demo walkthrough, screenshots, and portfolio copy](docs/demo.md).
 
-1. Use the live site, or run against an explicitly chosen **local** database with all migrations applied.
-2. Open `/app/`, sign in (the live preview requires an invited account), and select **Try a sample receipt**.
-3. Watch real browser OCR, review the synthetic receipt, and correct any field.
-4. Choose an explicit deadline or a user-supplied day window. Check the displayed
+1. Open the [guest preview](https://cloud-document-api.onrender.com/app/preview.html) for a no-login OCR demo. Try a sample or your own image; guest mode does not save purchases or originals.
+2. For the complete private workspace, use an invited account on the live site, or run against an explicitly chosen **local** database with all migrations applied.
+3. Open `/app/`, sign in, and select **Try a sample receipt**.
+4. Watch real browser OCR, review the synthetic receipt, and correct any field.
+5. Choose an explicit deadline or a user-supplied day window. Check the displayed
    calculation, then confirm and save.
-5. Review the dashboard, download the private original, and use **Add to calendar**.
+6. Review the dashboard, download the private original, and use **Add to calendar**.
 
 The samples contain no real personal/payment information. OCR can make mistakes;
 ambiguous fields are left blank. Merchant names never imply a return policy.
