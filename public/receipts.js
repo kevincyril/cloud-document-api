@@ -1,8 +1,14 @@
 'use strict';
 (() => {
   const U = window.ReceiptUtils;
-  let purchases = [], pageOffset = 0, hasMore = false, draft = null, previewUrl = '', cancelOcr = null, pendingSample = false;
+  let purchases = [], visiblePurchases = [], baseline = '', pageOffset = 0, hasMore = false, draft = null, previewUrl = '', cancelOcr = null, pendingSample = false;
   const pageSize = 50;
+  function snapshot() {
+    return JSON.stringify({ fields: Array.from($('purchase-form').elements).filter(node => node.id && !['deadline-confirm', 'purchase-fields'].includes(node.id) && ['INPUT', 'SELECT', 'TEXTAREA'].includes(node.tagName)).map(node => [node.id, node.type === 'checkbox' ? node.checked : node.type === 'file' ? Array.from(node.files).map(file => [file.name, file.size, file.lastModified]) : node.value]), receipt: draft?.receiptId, ocr: draft?.ocr });
+  }
+  function isDirty() { return Boolean(draft && snapshot() !== baseline); }
+  function canDiscard() { return !isDirty() || window.confirm('Discard your unsaved purchase changes? Any original already uploaded will remain in your private document library.'); }
+  window.addEventListener('beforeunload', event => { if (token && isDirty()) { event.preventDefault(); event.returnValue = ''; } });
   function clearPreview() {
     $('receipt-preview').hidden = true; $('receipt-preview').removeAttribute('src');
     if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = '';
@@ -12,7 +18,8 @@
     $('receipt-preview-help').textContent = 'Your private original. Use Download original to inspect it at full size.';
   }
   function reset() {
-    cancelOcr?.(); clearPreview(); draft = null; purchases = []; pageOffset = 0; hasMore = false;
+    cancelOcr?.(); clearPreview(); draft = null; purchases = []; visiblePurchases = []; baseline = ''; pageOffset = 0; hasMore = false;
+    $('purchase-query').value = ''; $('purchase-filter').value = 'all'; $('purchase-sort').value = 'deadline';
     $('purchase-editor').hidden = true; $('purchase-form').reset(); $('receipt-upload-form').reset();
     $('purchase-list').replaceChildren(); $('raw-ocr').textContent = ''; $('ocr-suggestions').textContent = '';
     $('sample-intro').hidden = false; $('purchase-fields').disabled = false; $('ocr-progress').hidden = true;
@@ -22,10 +29,14 @@
     for (const id of ['count-open', 'count-soon', 'count-returned']) $(id).textContent = '0';
   }
   function sync() {
+    const state = !draft ? '' : isDirty() ? 'Unsaved changes' : draft.id ? 'All changes saved' : 'No changes yet';
+    if ($('purchase-draft-status').textContent !== state) $('purchase-draft-status').textContent = state;
     $('purchase-currency').required = $('purchase-amount').value.trim() !== '';
     $('purchase-amount').required = $('purchase-currency').value !== '';
     $('purchase-previous').disabled = busy || pageOffset === 0;
     $('purchase-next').disabled = busy || !hasMore || pageOffset >= 10000;
+    $('purchase-export').disabled = busy || !visiblePurchases.length;
+    $('purchase-query-clear').disabled = busy || !$('purchase-query').value;
     $('receipt-download').hidden = !draft?.receiptId;
     $('receipt-unlink').hidden = !draft?.receiptId;
     $('policy-download').hidden = !$('policy-document').value;
@@ -43,14 +54,16 @@
     $('count-soon').textContent = annotated.filter(p => !p.returned && p.state.days !== null && p.state.days >= 0 && p.state.days <= 7).length;
     $('count-returned').textContent = annotated.filter(p => p.returned).length;
     const filter = $('purchase-filter').value;
-    const shown = annotated.filter(p => filter === 'all' || (filter === 'active' ? !p.returned : filter === 'due_soon' ? !p.returned && p.state.days !== null && p.state.days >= 0 && p.state.days <= 7 : p.state.key === filter));
+    const query = $('purchase-query').value.trim().toLocaleLowerCase();
+    const shown = annotated.filter(p => (filter === 'all' || (filter === 'active' ? !p.returned : filter === 'due_soon' ? !p.returned && p.state.days !== null && p.state.days >= 0 && p.state.days <= 7 : p.state.key === filter)) && (!query || [p.merchant, p.description, p.policy_notes].some(value => String(value || '').toLocaleLowerCase().includes(query))));
     const sort = $('purchase-sort').value;
     shown.sort((a, b) => sort === 'merchant' ? a.merchant.localeCompare(b.merchant) : sort === 'newest' ? b.created_at.localeCompare(a.created_at) : (a.deadline_date ?? '9999-99-99').localeCompare(b.deadline_date ?? '9999-99-99') || a.id.localeCompare(b.id));
+    visiblePurchases = shown;
     $('purchase-list').replaceChildren();
     if (!shown.length) {
       const empty = element('section', '', 'card purchase-empty');
       empty.append(element('span', '↩', 'empty-mark'), element('h3', purchases.length ? 'Nothing in this view' : pageOffset ? 'No more purchases' : 'A fresh start for your receipts'),
-        element('p', purchases.length ? 'Change the status filter to see other purchases on this page.' : 'Upload a receipt or try the synthetic sample. Review the details, confirm a deadline, and it will appear here.'));
+        element('p', purchases.length ? 'Clear your search or change the status filter to see other purchases on this page.' : 'Upload a receipt or try the synthetic sample. Review the details, confirm a deadline, and it will appear here.'));
       $('purchase-list').append(empty);
     }
     for (const p of shown) {
@@ -113,18 +126,19 @@
       } catch (error) { $('deadline-date').value = ''; $('deadline-calculation').textContent = error.message; }
     }
   }
-  async function newDraft() {
+  async function newDraft(confirmed = false) {
+    if (!confirmed && !canDiscard()) return false;
     cancelOcr?.(); clearPreview(); $('purchase-form').reset();
     draft = { id: null, receiptId: null, policyId: null, ocr: '', suggestions: {}, deadlineDate: null };
     $('editor-title').textContent = 'Review your purchase'; $('purchase-save').textContent = 'Save purchase';
     $('purchase-editor').hidden = false; $('receipt-preview-help').textContent = 'You can save a purchase without a receipt.';
     $('receipt-retained').textContent = ''; $('purchase-fields').disabled = false;
-    reviewText(); updateDeadline(); await policyOptions(); sync();
+    reviewText(); updateDeadline(); baseline = snapshot(); await policyOptions(); sync();
     $('editor-title').focus(); $('purchase-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   async function openPurchase(id) {
     const { purchase: p } = await request(`/purchases/${encodeURIComponent(id)}`);
-    await newDraft();
+    if (await newDraft() === false) return;
     draft = { id: p.id, revision: p.revision, receiptId: p.receipt_document_id, policyId: p.policy_document_id, ocr: p.raw_ocr_text, suggestions: p.suggestions, deadlineDate: p.deadline_date };
     $('editor-title').textContent = 'Purchase details'; $('purchase-save').textContent = 'Save changes';
     $('purchase-merchant').value = p.merchant; $('purchase-date').value = p.purchase_date || '';
@@ -142,7 +156,7 @@
         catch { $('receipt-preview-help').textContent = 'Preview unavailable. Try Download original.'; }
       }
     }
-    sync(); notice('Purchase opened. Reconfirm any deadline before saving changes.');
+    baseline = snapshot(); sync(); notice('Purchase opened. Reconfirm any deadline before saving changes.');
   }
   async function uploadDocument(file) {
     if (file.size > 5 * 1024 * 1024) throw new Error('File exceeds the 5 MiB limit.');
@@ -178,10 +192,11 @@
   }
   async function uploadReceipt(file) {
     if (!['image/jpeg', 'image/png'].includes(file.type)) throw new Error('Receipt OCR supports JPEG and PNG images. Use the document library for PDF/text.');
+    if (!canDiscard()) return;
     const current = generation;
     const doc = await uploadDocument(file); // Server validates bytes/dimensions before preview or OCR.
     if (current !== generation) return;
-    await newDraft(); draft.receiptId = doc.id; preview(file); sync();
+    await newDraft(true); draft.receiptId = doc.id; preview(file); sync();
     $('receipt-retained').textContent = 'Original saved privately. If you close or a save fails, it remains in your document library. You can retry this form without uploading again.';
     const text = await recognize(file);
     if (current !== generation || !draft) return;
@@ -246,21 +261,22 @@
     const p = result.purchase; currentDraft.id = p.id; currentDraft.revision = p.revision; currentDraft.policyId = p.policy_document_id; currentDraft.deadlineDate = p.deadline_date;
     $('deadline-confirm').checked = false; $('purchase-save').textContent = 'Save changes';
     $('receipt-retained').textContent = p.deadline_date ? `Saved · User-confirmed deadline: ${p.deadline_date}. Reconfirm before saving edits.` : 'Purchase saved without a deadline.';
+    baseline = snapshot();
     try { await loadPurchases(); await list(); } catch { notice('Purchase saved, but the lists could not refresh. Use Refresh purchases.', true); sync(); return; }
     sync(); notice('Purchase saved. Your receipt and confirmed details are private to your account.');
   }
-  window.ReceiptTracker = { reset, sync, async onLogin() {
+  window.ReceiptTracker = { reset, sync, canDiscard, async onLogin() {
     $('sample-intro').hidden = true; pageOffset = 0; await loadPurchases();
     if (pendingSample) { pendingSample = false; await sample(); }
   } };
-  $('sample-start').onclick = () => { pendingSample = true; notice('Sign in or create an account to save the synthetic sample privately.'); $('email').focus(); };
+  $('sample-start').onclick = () => { pendingSample = true; notice('Sign in to save the synthetic sample privately.'); (window.ManagedAuth?.enabled ? (!$('email-code-request').hidden ? $('code-email') : document.querySelector('#auth-providers button')) : $('email'))?.focus(); };
   $('sample-receipt').onclick = () => action('Loading synthetic sample receipt…', sample);
-  $('manual-purchase').onclick = () => action('Opening manual entry…', async () => { await newDraft(); notice('Enter the details you know. A receipt and OCR are optional.'); });
+  $('manual-purchase').onclick = () => action('Opening manual entry…', async () => { if (await newDraft() !== false) notice('Enter the details you know. A receipt and OCR are optional.'); });
   $('receipt-upload-form').onsubmit = event => { event.preventDefault(); action('Saving your private receipt…', async () => {
     const file = $('receipt-file').files[0]; if (!file) throw new Error('Choose a receipt image first.'); await uploadReceipt(file);
   }); };
   $('ocr-cancel').onclick = () => cancelOcr?.();
-  $('editor-close').onclick = () => { cancelOcr?.(); clearPreview(); draft = null; $('purchase-editor').hidden = true; $('purchase-form').reset(); $('manual-purchase').focus(); notice('Editor closed. Uploaded originals remain in your private document library.'); };
+  $('editor-close').onclick = () => { if (!canDiscard()) return; cancelOcr?.(); clearPreview(); draft = null; baseline = ''; $('purchase-editor').hidden = true; $('purchase-form').reset(); $('manual-purchase').focus(); notice('Editor closed. Uploaded originals remain in your private document library.'); };
   $('receipt-unlink').onclick = () => { if (draft) draft.receiptId = null; clearPreview(); $('receipt-preview-help').textContent = 'Receipt unlinked in this form. Save to apply; the original remains in your document library.'; sync(); };
   $('purchase-form').onsubmit = event => { event.preventDefault(); action('Saving reviewed purchase…', async () => {
     $('purchase-fields').disabled = true;
@@ -277,6 +293,15 @@
   $('purchase-currency').addEventListener('change', sync);
   $('purchase-refresh').onclick = () => action('Refreshing purchases…', async () => { await loadPurchases(); notice('Purchases refreshed.'); });
   $('purchase-filter').onchange = render; $('purchase-sort').onchange = render;
+  $('purchase-form').addEventListener('input', sync);
+  $('purchase-form').addEventListener('change', sync);
+  $('purchase-query').oninput = render;
+  $('purchase-query-clear').onclick = () => { $('purchase-query').value = ''; render(); $('purchase-query').focus(); };
+  $('purchase-export').onclick = () => action('Preparing purchase export…', async () => {
+    if (!visiblePurchases.length) throw new Error('There are no purchases in this view to export.');
+    download(new Blob([U.purchasesCsv(visiblePurchases)], { type: 'text/csv;charset=utf-8' }), `return-keeper-purchases-${U.today()}.csv`);
+    notice(`Exported ${visiblePurchases.length} purchase${visiblePurchases.length === 1 ? '' : 's'} from this page and current filters. Keep your downloaded file private.`);
+  });
   for (const [id, delta] of [['purchase-previous', -pageSize], ['purchase-next', pageSize]]) $(id).onclick = () => action('Loading purchases…', async () => { pageOffset = Math.max(0, Math.min(10000, pageOffset + delta)); await loadPurchases(); notice(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && token) render(); });
   setInterval(() => { if (token && !document.hidden) render(); }, 60000);

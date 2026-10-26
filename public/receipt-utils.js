@@ -120,5 +120,16 @@
     warnings.push('OCR suggestions may be wrong. Review every field.');
     return { merchant, purchaseDate, amount, currency, warnings };
   }
-  return { validDate, addDays, today, status, decimal, parseReceipt, receiptDateReview };
+  function purchasesCsv(purchases) {
+    const cell = value => {
+      let text = value == null ? '' : String(value);
+      // Prevent user-entered text from being interpreted as spreadsheet formulas.
+      if (/^[\s]*[=+\-@\t\r\n]/.test(text)) text = "'" + text;
+      return '"' + text.replace(/"/g, '""') + '"';
+    };
+    const rows = [['Merchant', 'Purchase date', 'Total', 'Currency', 'Return deadline', 'Returned', 'Description', 'Policy notes']];
+    for (const p of purchases) rows.push([p.merchant, p.purchase_date, p.amount_minor == null ? '' : decimal(p.amount_minor, p.currency), p.currency, p.deadline_date, p.returned ? 'Yes' : 'No', p.description, p.policy_notes]);
+    return '\uFEFF' + rows.map(row => row.map(cell).join(',')).join('\r\n') + '\r\n';
+  }
+  return { validDate, addDays, today, status, decimal, parseReceipt, receiptDateReview, purchasesCsv };
 });

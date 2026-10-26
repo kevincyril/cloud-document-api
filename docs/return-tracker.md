@@ -299,3 +299,18 @@ test is not part of the default CI job, which does not install Firefox.
 [The portfolio/demo guide](demo.md) includes the public URL, a short script,
 synthetic-data screenshots, and an honest list of hands-on checks still requiring
 the user's own receipts, real phone, Safari, or personal calendar account.
+# Dashboard usability
+
+The dashboard supports case-insensitive search of merchant, description, and
+policy notes within the current page. Search combines with the status filter
+and sort. CSV export includes only the displayed view, without raw OCR or
+original files; amounts remain exact and currencies are retained per row.
+Spreadsheet formula prefixes are neutralized and embedded quotes/newlines are
+escaped. Downloaded files are private data and should be handled accordingly.
+
+Changed purchase fields, receipt links, and new OCR drafts trigger a discard
+warning before close, replacement, or manual sign-out. Leaving the page uses
+the browser's standard unsaved-changes warning where supported. A successful
+save resets the warning state, even if refreshing the lists later fails.
+Session expiry clears private state without retaining drafts. Drafts are not
+saved to localStorage or sessionStorage.

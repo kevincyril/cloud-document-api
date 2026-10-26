@@ -1,6 +1,18 @@
 # Verified email and social sign-in
 
-Google login is deployed as a restricted preview. Passwordless email-code login is also implemented, and stays disabled until SMTP and the email templates below are ready. No SMTP account, paid plan, or Apple membership is created by this change.
+Google and passwordless email-code login are deployed as a restricted preview. The owner has configured SMTP/templates and confirmed receiving a code and signing in successfully. Public access remains disabled. No paid plan or Apple membership was created by this change.
+
+## Current rollout status
+
+- Live app: https://cloud-document-api.onrender.com/app/.
+- Email-code login was introduced in release `28afd2f`, Render deploy `dep-dbfbaeqjnfac738ok9g0`.
+- `AUTH_EMAIL_ENABLED=true`, `AUTH_PROVIDERS=google`, `AUTH_PUBLIC_ENABLED=false`; the tester allowlist is configured privately in Render.
+- Migration 007 is applied. The verified test identity is linked to an application account. Direct Supabase Data API reads of the users table remain unavailable to both `anon` and `authenticated` roles.
+- Real email delivery and sign-in: confirmed by the owner. Simulated-provider browser tests cover invalid codes, one-time use, resend waiting, Google callbacks, and account linking.
+- Real Google consent and sign-in: confirmed by the owner.
+- Current SMTP sender: `onboarding@resend.dev`, confirmed by the owner. This test sender is restricted to the Resend account's own email address and cannot support public email-code login. A verified sending domain and a sender on that domain are still needed for other recipients.
+- Live health, email-code UI, Google redirect, legacy endpoint blocking, and invalid-token rejection: checked successfully.
+- Before opening access: configure a verified sending domain and sender for public email delivery, and verify saving a purchase and seeing it after signing in again. Owner approval is still required to enable public access.
 
 ## Google
 
@@ -62,7 +74,7 @@ SUPABASE_AUTH_URL=https://xhnfcmpidcnmgsfuktyf.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_PUBLIC_KEY
 APP_URL=https://cloud-document-api.onrender.com/app/
 AUTH_PROVIDERS=google
-AUTH_EMAIL_ENABLED=false
+AUTH_EMAIL_ENABLED=true
 AUTH_PUBLIC_ENABLED=false
 AUTH_ALLOWED_EMAILS=your-test-google-address@example.com
 ```
@@ -81,4 +93,4 @@ Sessions remain in browser memory and last up to one hour. Refreshing signs out.
 
 [Apple web login](https://supabase.com/docs/guides/auth/social-login/auth-apple) requires an Apple Developer account, Services ID, signing key, and client-secret rotation. Do not buy a membership just for this demo. Google is sufficient to start.
 
-Before enabling managed login publicly, test actual Google consent/return, cancelled consent, email delivery/verification/resend, an unverified account being refused, and linking an existing workspace without losing receipts. Local automated tests simulate the provider; they cannot prove real inbox delivery or Google consent. Legacy `/auth/login` and `/auth/register` are disabled when managed mode is enabled. Keep `AUTH_MODE=legacy` until these external settings are ready.
+Before enabling managed login publicly, test actual Google consent/return, cancelled consent, email delivery/verification/resend, an unverified account being refused, and linking an existing workspace without losing receipts. Local automated tests simulate the provider; they cannot prove real inbox delivery or Google consent. Legacy `/auth/login` and `/auth/register` are disabled when managed mode is enabled. The current preview uses `AUTH_MODE=supabase`; keep `AUTH_PUBLIC_ENABLED=false` until the remaining public-release checks and owner approval are complete.

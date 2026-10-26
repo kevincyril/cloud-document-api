@@ -55,6 +55,7 @@ test('Firefox real receipt OCR, confirmation, private preview, calendar, cancell
     const wait = (expression, timeout) => until(() => evaluate(expression), timeout);
     await command('browsingContext.navigate', { context, url: base + '/app/', wait: 'complete' });
     await wait('Boolean(window.ReceiptTracker)');
+    await evaluate('(()=>{window.confirm=()=>true;return true})()');
     const password = randomUUID();
     await evaluate(`(()=>{document.getElementById('auth-toggle').click();document.getElementById('name').value='Firefox tester';document.getElementById('email').value=${JSON.stringify(randomUUID() + '@example.com')};document.getElementById('password').value=${JSON.stringify(password)};document.getElementById('auth-form').requestSubmit()})()`);
     await wait('!document.getElementById("workspace").hidden && !document.getElementById("sample-receipt").disabled');

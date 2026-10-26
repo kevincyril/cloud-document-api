@@ -59,6 +59,18 @@ test('browser receipt OCR, review, deadline, private originals, calendar, fallba
     const password = randomUUID(), email = `browser-${randomUUID()}@example.com`;
     await evaluate(`document.getElementById('auth-toggle').click(); document.getElementById('name').value='Browser tester'; document.getElementById('email').value=${JSON.stringify(email)}; document.getElementById('password').value=${JSON.stringify(password)}; document.getElementById('auth-form').requestSubmit();`);
     await wait('!document.getElementById("workspace").hidden && !document.getElementById("refresh").disabled');
+    assert.equal(await evaluate('document.getElementById("account-label").textContent'), email);
+    await evaluate('window.confirm=()=>true; document.getElementById("manual-purchase").click()');
+    await wait('!document.getElementById("purchase-editor").hidden && !document.getElementById("purchase-save").disabled');
+    await evaluate('document.getElementById("purchase-merchant").value="Unsaved draft"; document.getElementById("purchase-merchant").dispatchEvent(new Event("input",{bubbles:true})); window.discardPrompts=0; window.confirm=()=>{window.discardPrompts++;return false}; document.getElementById("editor-close").click(); document.getElementById("logout").click()');
+    assert.equal(await evaluate('document.getElementById("purchase-draft-status").textContent'), 'Unsaved changes');
+    assert.equal(await evaluate('document.getElementById("purchase-editor").hidden'), false);
+    assert.equal(await evaluate('document.getElementById("workspace").hidden'), false);
+    assert.equal(await evaluate('document.getElementById("purchase-merchant").value'), 'Unsaved draft');
+    assert.equal(await evaluate('window.discardPrompts'), 2);
+    assert.equal(await evaluate('(()=>{const event=new Event("beforeunload",{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented})()'), true);
+    await evaluate('window.confirm=()=>true; document.getElementById("editor-close").click()');
+    assert.equal(await evaluate('document.getElementById("purchase-editor").hidden'), true);
     assert.equal(await evaluate('localStorage.length + sessionStorage.length'), 0);
     await command('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: path.join(directory, 'downloads') });
     // Actual deployed PNG -> Tesseract worker/WASM/language data -> editable form.
@@ -78,6 +90,23 @@ test('browser receipt OCR, review, deadline, private originals, calendar, fallba
     await evaluate(`document.getElementById('deadline-confirm').checked=true; { const dt=new DataTransfer(); dt.items.add(new File(['Synthetic policy: check the condition of the item.'], 'sample-policy.txt', {type:'text/plain'})); document.getElementById('policy-file').files=dt.files; } document.getElementById('purchase-form').requestSubmit();`);
     await wait('document.querySelectorAll(".purchase-card").length === 1 && !document.getElementById("purchase-save").disabled');
     const purchaseId = await evaluate('document.querySelector(".purchase-card").dataset.id');
+    assert.equal(await evaluate('document.getElementById("purchase-draft-status").textContent'), 'All changes saved');
+    await evaluate('document.getElementById("purchase-query").value="not-a-store-match"; document.getElementById("purchase-query").dispatchEvent(new Event("input"))');
+    assert.equal(await evaluate('document.querySelectorAll(".purchase-card").length'), 0);
+    assert.equal(await evaluate('document.getElementById("purchase-export").disabled'), true);
+    await evaluate('document.getElementById("purchase-query-clear").click(); document.getElementById("purchase-query").value="maple"; document.getElementById("purchase-query").dispatchEvent(new Event("input")); document.getElementById("purchase-export").click()');
+    await wait('document.getElementById("notice").textContent.includes("Exported 1 purchase") && !document.getElementById("purchase-export").disabled');
+    const csvName = await evaluate('`return-keeper-purchases-${window.ReceiptUtils.today()}.csv`');
+    const csv = await until(async () => { try { return await readFile(path.join(directory, 'downloads', csvName), 'utf8'); } catch { return false; } });
+    assert.match(csv, /MAPLE GOODS/); assert.match(csv, /"34.57","USD"/);
+    await evaluate('document.getElementById("purchase-query-clear").click()');
+    await command('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), true);
+    if (process.env.BROWSER_TEST_MOBILE_SCREENSHOT) {
+      const shot = await command('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+      await writeFile(process.env.BROWSER_TEST_MOBILE_SCREENSHOT, Buffer.from(shot.data, 'base64'));
+    }
+    await command('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1000, deviceScaleFactor: 1, mobile: false });
     assert.match(await evaluate('document.querySelector(".purchase-money").textContent'), /USD 34.57/);
     assert.match(await evaluate('document.getElementById("raw-ocr").textContent'), /34.56/);
     await evaluate('document.getElementById("receipt-download").click()');

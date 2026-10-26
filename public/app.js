@@ -12,6 +12,7 @@ function signOut(message = 'Signed out.') {
   window.ReceiptTracker?.reset();
   generation++; token = ''; selected = null; clearTimeout(expiryTimer); clearTimeout(pollTimer);
   $('workspace').hidden = true; $('auth').hidden = false; $('logout').hidden = true;
+  $('account-label').hidden = true; $('account-label').textContent = '';
   $('documents').replaceChildren(); $('text').textContent = ''; $('result').hidden = true; $('empty').hidden = false;
   $('auth-form').reset(); $('upload-form').reset(); clearSearch(); notice(message);
 }
@@ -43,6 +44,7 @@ async function action(label, work) {
 }
 function updateControls() {
   window.ReceiptTracker?.sync();
+  window.ManagedAuth?.sync();
   $('previous').disabled = busy || offset === 0;
   $('next').disabled = busy || !$('documents').dataset.hasNext || offset >= 10000;
   $('process').disabled = busy || !selected || selected.status === 'processing' || !['application/pdf', 'text/plain'].includes(selected.mime_type);
@@ -116,11 +118,12 @@ $('auth-form').onsubmit = event => {
 async function completeSignIn(body) {
     token = body.token; offset = 0; $('auth-form').reset();
     $('auth').hidden = true; $('workspace').hidden = false; $('logout').hidden = false; $('greeting').textContent = `WELCOME, ${body.user.name}`;
+    $('account-label').textContent = body.user.email; $('account-label').hidden = false;
     const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
     expiryTimer = setTimeout(() => signOut('Your session expired. Sign in again.'), Math.max(0, payload.exp * 1000 - Date.now()));
     await list(); await window.ReceiptTracker?.onLogin(); notice('Signed in. Your return desk is ready.');
 }
-$('logout').onclick = () => signOut();
+$('logout').onclick = () => { if (window.ReceiptTracker?.canDiscard() !== false) signOut(); };
 $('upload-form').onsubmit = event => { event.preventDefault(); action('Uploading document…', async () => {
   const file = $('file').files[0]; if (!file) throw new Error('Choose a file first.');
   if (file.size > 5 * 1024 * 1024) throw new Error('File exceeds the 5 MiB limit.');

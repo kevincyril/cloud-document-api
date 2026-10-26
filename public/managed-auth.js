@@ -24,15 +24,27 @@ function createAuthStorage(storage, now = Date.now) {
 }
 if (typeof module !== 'undefined') module.exports = { createAuthStorage };
 if (typeof window !== 'undefined') {
-  let client, settings, pendingToken = '', pendingEmail = '', resendAfter = 0, storage, clearing = Promise.resolve();
+  let client, settings, pendingToken = '', pendingEmail = '', resendAfter = 0, cooldownTimer, storage, clearing = Promise.resolve();
+  function sync() {
+    if (!managed.enabled || !settings?.emailEnabled) return;
+    const remaining = Math.max(0, Math.ceil((resendAfter - Date.now()) / 1000));
+    $('email-code-send').disabled = busy || remaining > 0;
+    $('email-code-send').textContent = remaining ? `Send again in ${remaining}s` : pendingEmail ? 'Resend sign-in code' : 'Send sign-in code';
+    const status = remaining ? 'A new code can be requested after the wait shown above.' : '';
+    if ($('email-resend-status').textContent !== status) $('email-resend-status').textContent = status;
+    clearTimeout(cooldownTimer);
+    if (remaining) cooldownTimer = setTimeout(sync, 1000);
+  }
   const managed = window.ManagedAuth = { enabled: false, clear() {
     pendingToken = ''; $('auth-link').hidden = true; $('legacy-password').value = '';
     pendingEmail = ''; $('email-code-verify').hidden = true; $('email-code').value = ''; $('email-code-request').reset();
+    $('email-code-destination').textContent = ''; clearTimeout(cooldownTimer);
     // Let the SDK revoke its session before removing its in-memory token.
     // New attempts wait so this cleanup cannot erase a later sign-in.
     if (client) clearing = client.auth.signOut({ scope: 'local' }).catch(() => {}).finally(() => storage.clear());
     else storage?.clear();
-  }, submit, ready: null };
+    sync();
+  }, submit, sync, ready: null };
   function check(result) { if (result.error) throw new Error(result.error.status === 429 ? 'Too many attempts. Wait before trying again.' : 'Sign-in could not complete. Check your details and verify your email, then try again.'); return result.data; }
   async function exchange(session, legacyPassword) {
     if (!session?.access_token) throw new Error('No sign-in session returned. Sign in again after verifying your email.');
@@ -61,6 +73,7 @@ if (typeof window !== 'undefined') {
     storage = createAuthStorage(sessionStorage);
     client = window.supabase.createClient(settings.url, settings.key, { global: { fetch: (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(10000) }) }, auth: { flowType: 'pkce', storageKey: 'return-keeper-auth', storage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
     $('managed-options').hidden = false; $('email-code-request').hidden = !settings.emailEnabled;
+    $('auth').classList.add('managed-auth');
     $('auth-form').hidden = true;
     $('managed-help').textContent = settings.emailEnabled ? 'Sign in with a code sent to your email, or use a sign-in provider. Existing users can link their receipts with their previous workspace password after verifying their email.' : 'Choose a sign-in provider. Existing users can link their receipts with their previous workspace password.';
     if (settings.restricted) $('managed-help').textContent = 'Preview: sign-in is limited to invited testers. ' + $('managed-help').textContent;
@@ -72,6 +85,7 @@ if (typeof window !== 'undefined') {
     $('code-email').oninput = () => {
       pendingEmail = ''; pendingToken = ''; $('auth-link').hidden = true; $('legacy-password').value = '';
       $('email-code-verify').hidden = true; $('email-code').value = ''; $('email-code-send').textContent = 'Send sign-in code';
+      $('email-code-destination').textContent = ''; sync();
     };
     $('email-code-request').onsubmit = event => { event.preventDefault(); action('Sending sign-in code…', async () => {
       await clearing;
@@ -80,9 +94,11 @@ if (typeof window !== 'undefined') {
       if (!$('code-email').checkValidity() || !email) throw new Error('Enter a valid email address first.');
       if (Date.now() < resendAfter) throw new Error('Wait at least 60 seconds before requesting another code.');
       resendAfter = Date.now() + 60000;
+      sync();
       check(await client.auth.signInWithOtp({ email, options: { shouldCreateUser: true } }));
       pendingEmail = email; pendingToken = ''; $('auth-link').hidden = true; $('legacy-password').value = '';
       $('email-code').value = ''; $('email-code-verify').hidden = false; $('email-code-send').textContent = 'Resend sign-in code';
+      $('email-code-destination').textContent = `Code sent to ${pendingEmail}. Edit the email above to use a different address.`;
       $('email-code').focus(); notice('Check your inbox and spam folder for your sign-in code. Enter the latest code below.');
     }); };
     $('email-code-verify').onsubmit = event => { event.preventDefault(); action('Verifying sign-in code…', async () => {

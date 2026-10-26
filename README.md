@@ -3,7 +3,13 @@
 Upload a JPEG/PNG receipt, run free English OCR in your browser, review and
 correct the suggestions, and confirm your return deadline. A responsive dashboard
 shows days remaining, saved originals, and Returned status. Export an all-day
-calendar event; this app does not send emails, SMS, or automatic reminders.
+calendar event; return reminders are not sent by email or SMS.
+
+Search purchases by store, description, or policy notes on the current page,
+and export the filtered view as CSV with exact amounts and original currencies.
+Unsaved purchase edits prompt before closing, replacing the form, signing out,
+or leaving the page. Drafts remain in memory; no private form data is stored in
+browser storage. Forced session expiry still clears private state.
 
 The reviewed implementation is deployed at https://cloud-document-api.onrender.com/app/.
 The live receipt/OCR flow is verified. The private Supabase bucket accepts PDF,

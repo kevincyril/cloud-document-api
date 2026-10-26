@@ -23,6 +23,8 @@ exports.checkBrowser = async (base, { googleOnly = false } = {}) => {
     await command('Page.navigate', { url: base + '/app/' });
     await wait('Boolean(window.ManagedAuth?.enabled && document.querySelector("#auth-providers button"))');
     assert.equal(await evaluate('document.querySelector("#auth-providers button").textContent'), 'Continue with Google');
+    await command('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), true);
     if (googleOnly) {
       assert.equal(await evaluate('document.getElementById("auth-form").hidden'), true);
       assert.equal(await evaluate('document.getElementById("email-code-request").hidden'), true);
@@ -30,12 +32,15 @@ exports.checkBrowser = async (base, { googleOnly = false } = {}) => {
     } else {
     assert.equal(await evaluate('document.getElementById("auth-form").hidden'), true);
     await evaluate('document.getElementById("code-email").value="verified@example.com"; document.getElementById("email-code-request").requestSubmit()');
-    await wait('document.getElementById("notice").textContent.includes("Check your inbox") && !document.getElementById("email-code-send").disabled');
+    await wait('document.getElementById("notice").textContent.includes("Check your inbox") && !document.getElementById("email-code-confirm").disabled');
+    assert.equal(await evaluate('document.getElementById("email-code-send").disabled'),true);
+    assert.match(await evaluate('document.getElementById("email-code-send").textContent'),/Send again in/);
+    assert.match(await evaluate('document.getElementById("email-code-destination").textContent'),/verified@example.com/);
     assert.equal(await evaluate('document.getElementById("workspace").hidden'), true);
     assert.equal(await evaluate('localStorage.length'), 0);
     assert.equal(await evaluate('Object.values(sessionStorage).some(value => value.includes("refresh_token") || value.includes("access_token"))'), false);
     await evaluate('document.getElementById("email-code-request").requestSubmit()');
-    await wait('document.getElementById("notice").textContent.includes("Wait at least 60 seconds") && !document.getElementById("email-code-send").disabled');
+    await wait('document.getElementById("notice").textContent.includes("Wait at least 60 seconds") && !document.getElementById("email-code-confirm").disabled');
     await evaluate('document.getElementById("email-code").value="999999"; document.getElementById("email-code-verify").requestSubmit()');
     await wait('document.getElementById("notice").textContent.includes("invalid or expired") && !document.getElementById("email-code-confirm").disabled');
     assert.equal(await evaluate('document.getElementById("workspace").hidden'),true);

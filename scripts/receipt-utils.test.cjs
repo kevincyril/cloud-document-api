@@ -82,3 +82,14 @@ test('calendar is an all-day event, escapes injection, and folds UTF-8 by octets
   assert.ok(!text.includes('VALARM')); assert.ok(!text.includes('TZID'));
   assert.throws(()=>purchaseCalendar(id,'Shop','2023-02-29'));
 });
+test('purchase CSV preserves exact money, quotes and Unicode while preventing spreadsheet formulas', () => {
+  const csv = U.purchasesCsv([{ merchant: '=HYPERLINK("https://example.com")', purchase_date: '2026-10-25', amount_minor: '15406', currency: 'USD', deadline_date: null, returned: false, description: 'Store, "receipt"\nnext line', policy_notes: '  +SUM(1,2)' }, { merchant: '東京', amount_minor: '123', currency: 'JPY', returned: true }, { merchant: 'No total', amount_minor: null, currency: null }]);
+  assert.ok(csv.startsWith('\uFEFF"Merchant"'));
+  assert.ok(csv.includes('"\'=HYPERLINK(""https://example.com"")"'));
+  assert.ok(csv.includes('"154.06","USD"'));
+  assert.ok(csv.includes('"123","JPY"'));
+  assert.ok(csv.includes('"Store, ""receipt""\nnext line"'));
+  assert.ok(csv.includes('"\'  +SUM(1,2)"'));
+  assert.ok(csv.includes('"東京"'));
+  assert.ok(csv.includes('"No total","","",""'));
+});
