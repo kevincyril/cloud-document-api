@@ -11,9 +11,13 @@ purchase dashboard, turning receipt images into records users can verify and sav
 [API documentation](docs/api.md)
 
 The **guest preview needs no account**: try a sample or your own receipt, run
-browser OCR, edit the suggestions, and calculate a return deadline. Guest images
-and results stay in the tab and are cleared when you leave or refresh; saving
-and the private dashboard require sign-in.
+browser OCR, save and edit multiple temporary purchases, search/filter/sort the
+dashboard, mark returns, delete purchase details, and download CSV or calendar
+events. A local document library retains receipt and policy originals and supports
+searching receipt OCR and text attachments. **Load demo dashboard** adds synthetic
+examples with deadlines relative to today, so filters are easy to explore.
+Guest data stays in the tab and is cleared when you leave or refresh. Permanent
+storage, authentication, and server-side PDF extraction require sign-in.
 
 Account access is an **invitation-only preview**. Google sign-in requires an
 invited account, and email/password login and code-based password recovery remain
@@ -70,7 +74,7 @@ public email delivery needs a verified sender. Follow the
 Open the [live website](https://cloud-document-api.onrender.com/app/) and follow
 the [demo walkthrough, screenshots, and portfolio copy](docs/demo.md).
 
-1. Open the [guest preview](https://cloud-document-api.onrender.com/app/preview.html) for a no-login OCR demo. Try a sample or your own image; guest mode does not save purchases or originals.
+1. Open the [guest preview](https://cloud-document-api.onrender.com/app/preview.html). Try a receipt or **Load demo dashboard**, then explore purchases, search, return status, downloads, and exports. Guest data is temporary and never uploaded.
 2. For the complete private workspace, use an invited account on the live site, or run against an explicitly chosen **local** database with all migrations applied.
 3. Open `/app/`, sign in, and select **Try a sample receipt**.
 4. Watch real browser OCR, review the synthetic receipt, and correct any field.
