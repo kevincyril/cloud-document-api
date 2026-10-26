@@ -1,5 +1,37 @@
 # Return Keeper — private receipts & return deadlines
 
+Return Keeper is a full-stack web application that helps users organize receipts,
+review extracted purchase details, and track return deadlines in one place. It
+combines browser-based OCR with a private document library and a searchable
+purchase dashboard, turning receipt images into records users can verify and save.
+
+**[View the live project](https://cloud-document-api.onrender.com/app/)** ·
+[Demo walkthrough & screenshots](docs/demo.md) ·
+[API documentation](docs/api.md)
+
+The live project is an **invitation-only preview**. Google sign-in requires an
+invited account, and email/password login and code-based password recovery remain
+restricted to the owner's test address. Public signup is disabled.
+
+## Engineering highlights
+
+- **Full-stack development:** TypeScript, Node.js, Express, and a responsive HTML,
+  CSS, and JavaScript interface backed by PostgreSQL.
+- **OCR and data validation:** Tesseract.js reads receipts in the browser;
+  parsing handles multiple date and amount formats, flags uncertain fields, and
+  lets users review suggestions before saving.
+- **Authentication and authorization:** Supabase Auth supports Google OAuth,
+  verified email password setup, and code-based password recovery. HttpOnly
+  session cookies, CSRF checks, and owner-scoped queries protect private records.
+- **Database and API design:** REST endpoints, checksum-tracked migrations,
+  revision checks for concurrent edits, exact monetary amounts, private file
+  storage, and PostgreSQL full-text document search.
+- **Testing and deployment:** Automated unit, API integration, and real-browser
+  tests cover authentication, receipt parsing, account isolation, and persistence.
+  The application is deployed on Render with private Supabase storage.
+
+## What users can do
+
 Upload a JPEG/PNG receipt, run free English OCR in your browser, review and
 correct the suggestions, and confirm your return deadline. A responsive dashboard
 shows days remaining, saved originals, and Returned status. Export an all-day
@@ -13,7 +45,6 @@ Unsaved purchase edits prompt before closing, replacing the form, signing out,
 or leaving the page. Drafts remain in memory; no private form data is stored in
 browser storage. Forced session expiry still clears private state.
 
-The reviewed implementation is deployed at https://cloud-document-api.onrender.com/app/.
 The live receipt/OCR flow is verified. The private Supabase bucket accepts PDF,
 text, JPEG, and PNG with the existing 5 MiB limit.
 The existing PDF/text extraction and private search
@@ -23,12 +54,11 @@ Supabase/local storage. See [architecture, correctness, and limitations](docs/re
 
 ## Two-minute recruiter demo
 
-Verified email and optional Google/Apple/GitHub sign-in use
-`AUTH_MODE=supabase`. Google-only previews can be restricted to invited testers;
-email signup stays disabled until SMTP is configured. Email users verify a code
-before creating a password, sign in with that password on later visits, and can
-reset it using a fresh email code. Public delivery needs a verified sender;
-the current test sender and preview remain restricted. Follow the
+The live preview uses Google and verified email/password authentication through
+Supabase. Email users verify a code before creating a password and can reset it
+using a fresh email code. Google sign-in, password setup, recovery, and purchase
+persistence have been checked in the owner's account. Access remains restricted;
+public email delivery needs a verified sender. Follow the
 [authentication setup checklist](docs/auth-setup.md).
 
 Open the [live website](https://cloud-document-api.onrender.com/app/) and follow
