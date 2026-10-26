@@ -25,7 +25,10 @@ Supabase/local storage. See [architecture, correctness, and limitations](docs/re
 
 Verified email and optional Google/Apple/GitHub sign-in use
 `AUTH_MODE=supabase`. Google-only previews can be restricted to invited testers;
-email signup stays disabled until SMTP is configured. Follow the
+email signup stays disabled until SMTP is configured. Email users verify a code
+before creating a password, sign in with that password on later visits, and can
+reset it using a fresh email code. Public delivery needs a verified sender;
+the current test sender and preview remain restricted. Follow the
 [authentication setup checklist](docs/auth-setup.md).
 
 Open the [live website](https://cloud-document-api.onrender.com/app/) and follow

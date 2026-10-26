@@ -1,6 +1,6 @@
 # Verified email and social sign-in
 
-Google and passwordless email-code login are deployed as a restricted preview. The owner has configured SMTP/templates and confirmed receiving a code and signing in successfully. Public access remains disabled. No paid plan or Apple membership was created by this change.
+Google and email authentication use Supabase in a restricted preview. Email account creation verifies a code before password creation; later visits use email and password. Forgotten-password recovery verifies a new email code before saving a replacement password. The owner has confirmed the earlier email-code and Google flows. The new password flows need an actual inbox check after deployment. Public access remains disabled by the owner's latest instruction. No paid plan or Apple membership was created by this change.
 
 ## Current rollout status
 
@@ -12,7 +12,20 @@ Google and passwordless email-code login are deployed as a restricted preview. T
 - Real Google consent and sign-in: confirmed by the owner.
 - Current SMTP sender: `onboarding@resend.dev`, confirmed by the owner. This test sender is restricted to the Resend account's own email address and cannot support public email-code login. A verified sending domain and a sender on that domain are still needed for other recipients.
 - Live health, email-code UI, Google redirect, legacy endpoint blocking, and invalid-token rejection: checked successfully.
-- Before opening access: configure a verified sending domain and sender for public email delivery, and verify saving a purchase and seeing it after signing in again. Owner approval is still required to enable public access.
+- Purchase persistence, search, CSV export, sessions after refresh, and the latest receipt fix: confirmed by the owner.
+- Before opening access: configure a verified sending domain and sender for public email delivery, verify the password creation/sign-in/recovery flows with a real inbox, and confirm Google's audience allows public users. The owner has requested keeping access restricted while preparing passwords.
+
+## Email verification, passwords, and recovery
+
+1. **Create an account**: enter an email, request a code, verify it, then choose and confirm a 12–128 character password. Supabase stores the password; application tables never receive it. Sign in with the new password after it is saved.
+2. **Sign in with password**: enter the verified email and password. Supabase verifies the credentials; `/auth/exchange` separately verifies the confirmed identity and enforces the preview allowlist before issuing the application cookie.
+3. **Forgot password?**: enter the existing account email and verify a fresh code, then save a replacement password. Recovery requests use `signInWithOtp` with `shouldCreateUser: false`, so they cannot create new accounts. Verification uses `verifyOtp` with `type: 'email'`; password saving uses `updateUser({ password })` within that freshly verified Supabase session. The existing **Magic Link** code template handles this recovery too; no recovery-link redirect or Reset Password template is needed for this flow.
+
+Previous email-code users and Google users can choose **Create an account** to verify the same email and set their first password. This preserves their Supabase identity and linked receipts. The UI hides password setup until successful code verification, expires setup after ten minutes, clears entered codes/passwords, and keeps provider sessions in memory only. Resend waiting and provider rate limits remain enabled. Recovery responses do not disclose whether the email exists; delivery failures still need operator monitoring.
+
+Keep Supabase **Confirm email** enabled. Set its minimum password length to at least 12 as well; client validation complements the provider's enforcement. Stronger provider password policies may reject a password accepted by the form. Password reset does not immediately revoke already-issued application cookies or copied bearer tokens: those expire within one hour. This existing application-session limit still applies after provider session revocation. No claim of immediate all-device logout is made.
+
+Before release, test code delivery, wrong/expired/reused codes, matching password confirmation, first password sign-in, wrong passwords, and recovery followed by rejection of the previous password. Automated browser tests simulate Supabase and cover these flows except real delivery/expiry. Never paste passwords or email codes into chat.
 
 ## Google
 
@@ -25,7 +38,7 @@ Google and passwordless email-code login are deployed as a restricted preview. T
 
 See [Supabase Google setup](https://supabase.com/docs/guides/auth/social-login/auth-google). Google can be enabled before email registration is ready.
 
-## Email sign-in with a verification code
+## Email delivery for account verification and recovery
 
 ### SMTP quick start with Resend
 
@@ -62,7 +75,7 @@ Save SMTP settings, then complete the email-template steps below. Tell the app m
 5. Under the Email provider settings, choose a short OTP expiry (for example 600 seconds) and use six digits. Keep provider-side rate limits enabled. The app accepts numeric codes of 6–10 digits and enforces a 60-second resend wait; Supabase also limits and verifies attempts.
 6. Set `AUTH_EMAIL_ENABLED=true` on the existing Render service and deploy, while keeping `AUTH_PUBLIC_ENABLED=false` and the tester allowlist in place. Test actual inbox delivery, a wrong/expired code, a successful code, and rejection of code reuse before public release.
 
-The [built-in Supabase sender](https://supabase.com/docs/guides/auth/auth-smtp) only delivers to authorized project team addresses and is unsuitable for public signup. Set `AUTH_EMAIL_ENABLED=true` only after custom SMTP and the templates are ready. The user enters an email, receives a one-time code, and verifies it in the app. No new password is needed. First-time users can create an account through the same verified flow. Supabase generates, expires, rate-limits, and verifies the code; this app never stores or logs it. Existing-account linking still requires the previous workspace password to preserve ownership. See [Supabase passwordless email setup](https://supabase.com/docs/guides/auth/auth-email-passwordless).
+The [built-in Supabase sender](https://supabase.com/docs/guides/auth/auth-smtp) only delivers to authorized project team addresses and is unsuitable for public signup. Set `AUTH_EMAIL_ENABLED=true` only after custom SMTP and the templates are ready. Supabase generates, expires, rate-limits, and verifies codes; this app never stores or logs them. Codes authorize password creation or replacement; subsequent visits use a password. Existing-account linking still requires the previous workspace password to preserve ownership. See [Supabase email codes](https://supabase.com/docs/guides/auth/auth-email-passwordless) and [password authentication](https://supabase.com/docs/guides/auth/passwords).
 
 ## App configuration
 

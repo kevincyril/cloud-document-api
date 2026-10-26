@@ -19,13 +19,20 @@ process.env.STORAGE_DRIVER = 'local';
 process.env.JWT_SECRET = randomUUID();
 const identities = new Map();
 test('managed sign-in verifies identities and preserves ownership during linking', { timeout: 30000 }, async t => {
-  let otpIssued = false, otpUsed = false;
+  let otpIssued = false, otpUsed = false, providerPassword = '';
   const provider = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
     if (req.method === 'OPTIONS') { res.end(); return; }
-    if (req.url.startsWith('/auth/v1/otp')) { otpIssued = true; otpUsed = false; res.end('{}'); return; }
+    if (req.url.startsWith('/auth/v1/otp')) {
+      let raw = ''; req.on('data', chunk => { raw += chunk; }); req.on('end', () => {
+        const input = JSON.parse(raw);
+        if (input.email !== 'verified@example.com' && input.create_user === false) { res.writeHead(422); res.end(JSON.stringify({ msg: 'User not found' })); return; }
+        otpIssued = true; otpUsed = false; res.end('{}');
+      }); return;
+    }
     if (req.url.startsWith('/auth/v1/verify')) {
       let raw = ''; req.on('data', chunk => { raw += chunk; }); req.on('end', () => {
         const input = JSON.parse(raw);
@@ -44,12 +51,24 @@ test('managed sign-in verifies identities and preserves ownership during linking
     if (req.url.startsWith('/auth/v1/signup')) { res.end(JSON.stringify({ ...identities.get('verified'), email_confirmed_at: null })); return; }
     if (req.url.startsWith('/auth/v1/resend') || req.url.startsWith('/auth/v1/logout')) { res.end('{}'); return; }
     if (req.url.startsWith('/auth/v1/token')) {
-      res.end(JSON.stringify({ access_token: identities.get('browserToken'), refresh_token: 'simulated-refresh-token', expires_in: 3600, token_type: 'bearer', user: identities.get('verified') })); return;
+      let raw = ''; req.on('data', chunk => { raw += chunk; }); req.on('end', () => {
+        const input = JSON.parse(raw);
+        if (req.url.includes('grant_type=password') && (input.email !== 'verified@example.com' || !providerPassword || input.password !== providerPassword)) {
+          res.writeHead(400); res.end(JSON.stringify({ code: 'invalid_credentials', msg: 'Invalid login credentials' })); return;
+        }
+        res.end(JSON.stringify({ access_token: identities.get('browserToken'), refresh_token: 'simulated-refresh-token', expires_in: 3600, token_type: 'bearer', user: identities.get('verified') }));
+      }); return;
     }
     const value = identities.get(req.headers.authorization?.replace('Bearer ', ''));
     if (!value) { res.writeHead(401); res.end(JSON.stringify({ msg: 'Invalid token' })); }
     else if (value === 'outage') { res.writeHead(503); res.end(JSON.stringify({ msg: 'private provider details' })); }
-    else res.end(JSON.stringify(value));
+    else if (req.method === 'PUT' && req.url.startsWith('/auth/v1/user')) {
+      let raw = ''; req.on('data', chunk => { raw += chunk; }); req.on('end', () => {
+        const input = JSON.parse(raw);
+        if (!otpUsed || typeof input.password !== 'string' || input.password.length < 12) { res.writeHead(403); res.end(JSON.stringify({ msg: 'Verification required' })); return; }
+        providerPassword = input.password; res.end(JSON.stringify(value));
+      });
+    } else res.end(JSON.stringify(value));
   });
   await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
   process.env.SUPABASE_AUTH_URL = `http://127.0.0.1:${provider.address().port}`;
@@ -131,7 +150,7 @@ test('managed sign-in verifies identities and preserves ownership during linking
       const result = await call('exchange', { accessToken: 'outage' });
       assert.equal(result.status, 503); assert.ok(!JSON.stringify(result.body).includes('private provider'));
     });
-    if (process.env.AUTH_BROWSER_TEST === 'true') await t.test('real browser email-code validation, single use, resend limits, and OAuth PKCE callback', { timeout: 45000 }, async () => {
+    if (process.env.AUTH_BROWSER_TEST === 'true') await t.test('real browser verified password creation, password login, code-based recovery, and OAuth PKCE callback', { timeout: 45000 }, async () => {
       const { config } = require(compiled ? '../dist/config.js' : '../src/config.ts');
       config.APP_URL = base + '/app/';
       await require('./managed-auth-browser-helper.cjs').checkBrowser(base);

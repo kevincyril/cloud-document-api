@@ -18,7 +18,7 @@ exports.checkBrowser = async (base, { googleOnly = false } = {}) => {
     socket.addEventListener('message', event => { const data = JSON.parse(event.data); if (data.method === 'Runtime.exceptionThrown') errors.push(data.params.exceptionDetails.text); const item = pending.get(data.id); if (item) { pending.delete(data.id); data.error ? item.reject(new Error(data.error.message)) : item.resolve(data.result); } });
     function command(method, params = {}) { return new Promise((resolve, reject) => { const id = ++sequence; pending.set(id, { resolve, reject }); socket.send(JSON.stringify({ id, method, params })); }); }
     async function evaluate(expression) { const value = await command('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }); if (value.exceptionDetails) throw new Error(JSON.stringify(value.exceptionDetails)); return value.result.value; }
-    const wait = expression => until(() => evaluate(expression));
+    const wait = async expression => { try { return await until(() => evaluate(expression)); } catch (error) { throw new Error(`${error.message}: ${expression}; notice: ${await evaluate('document.getElementById("notice")?.textContent')}; runtime errors: ${errors.join(', ')}`); } };
     await command('Runtime.enable');
     await command('Page.navigate', { url: base + '/app/' });
     await wait('Boolean(window.ManagedAuth?.enabled && document.querySelector("#auth-providers button"))');
@@ -31,6 +31,10 @@ exports.checkBrowser = async (base, { googleOnly = false } = {}) => {
       assert.match(await evaluate('document.getElementById("managed-help").textContent'), /invited testers/);
     } else {
     assert.equal(await evaluate('document.getElementById("auth-form").hidden'), true);
+    assert.equal(await evaluate('document.getElementById("email-password-login").hidden'),false);
+    assert.equal(await evaluate('document.getElementById("email-password-set").hidden'),true);
+    await evaluate('document.getElementById("email-create").click()');
+    await wait('!document.getElementById("email-code-request").hidden && !document.getElementById("email-code-send").disabled');
     await evaluate('document.getElementById("code-email").value="verified@example.com"; document.getElementById("email-code-request").requestSubmit()');
     await wait('document.getElementById("notice").textContent.includes("Check your inbox") && !document.getElementById("email-code-confirm").disabled');
     assert.equal(await evaluate('document.getElementById("email-code-send").disabled'),true);
@@ -46,13 +50,45 @@ exports.checkBrowser = async (base, { googleOnly = false } = {}) => {
     assert.equal(await evaluate('document.getElementById("workspace").hidden'),true);
     assert.equal(await evaluate('document.getElementById("email-code").value'),'');
     await evaluate('document.getElementById("email-code").value="123456"; document.getElementById("email-code-verify").requestSubmit()');
+    await wait('!document.getElementById("email-password-set").hidden && !busy');
+    assert.equal(await evaluate('document.getElementById("workspace").hidden'),true);
+    await evaluate('document.getElementById("new-password").value="first-test-passphrase"; document.getElementById("confirm-password").value="different-passphrase"; document.getElementById("email-password-set").requestSubmit()');
+    await wait('document.getElementById("notice").textContent.includes("do not match") && !busy');
+    assert.equal(await evaluate('document.getElementById("new-password").value'), '');
+    await evaluate('document.getElementById("new-password").value="first-test-passphrase"; document.getElementById("confirm-password").value="first-test-passphrase"; document.getElementById("email-password-set").requestSubmit()');
+    await wait('document.getElementById("notice").textContent.includes("Password saved") && !busy');
+    assert.equal(await evaluate('document.getElementById("email-password-set").hidden'),true);
+    await evaluate('document.getElementById("login-password").value="wrong-password"; document.getElementById("email-password-login").requestSubmit()');
+    await wait('document.getElementById("notice").textContent.includes("Sign-in could not complete") && !busy');
+    assert.equal(await evaluate('document.getElementById("workspace").hidden'),true);
+    assert.equal(await evaluate('document.getElementById("login-password").value'),'');
+    await evaluate('document.getElementById("login-password").value="first-test-passphrase"; document.getElementById("email-password-login").requestSubmit()');
     await wait('!document.getElementById("workspace").hidden && !document.getElementById("refresh").disabled');
     assert.equal(await evaluate('localStorage.length'), 0);
     assert.equal(await evaluate('Object.values(sessionStorage).some(value => value.includes("refresh_token") || value.includes("access_token"))'), false);
     const reused = await evaluate('(async () => { const cfg = await (await fetch("/auth/config")).json(); const response = await fetch(cfg.url + "/auth/v1/verify", {method:"POST",headers:{"Content-Type":"application/json",apikey:cfg.key},body:JSON.stringify({email:"verified@example.com",token:"123456",type:"email"})}); return response.status; })()');
     assert.equal(reused,403);
     await evaluate('document.getElementById("logout").click()');
-    await wait('document.getElementById("workspace").hidden');
+    await wait('document.getElementById("workspace").hidden && !busy');
+    // Advance only the local resend clock; no real emails are sent by this isolated provider.
+    await evaluate('Date.now = (() => { const original = Date.now; return () => original() + 61000; })(); document.getElementById("email-forgot").click()');
+    await wait('!document.getElementById("email-code-request").hidden && !busy');
+    await evaluate('document.getElementById("code-email").value="missing@example.com"; document.getElementById("email-code-request").requestSubmit()');
+    await wait('document.getElementById("notice").textContent.includes("Check your inbox") && !busy');
+    assert.match(await evaluate('document.getElementById("email-code-destination").textContent'),/If .* has an account/);
+    await evaluate('document.getElementById("code-email").value="verified@example.com"; document.getElementById("code-email").dispatchEvent(new Event("input")); Date.now = (() => { const original = Date.now; return () => original() + 61000; })(); document.getElementById("email-code-request").requestSubmit()');
+    await wait('document.getElementById("notice").textContent.includes("Check your inbox") && !busy');
+    await evaluate('document.getElementById("email-code").value="123456"; document.getElementById("email-code-verify").requestSubmit()');
+    await wait('!document.getElementById("email-password-set").hidden && !busy');
+    await evaluate('document.getElementById("new-password").value="reset-test-passphrase"; document.getElementById("confirm-password").value="reset-test-passphrase"; document.getElementById("email-password-set").requestSubmit()');
+    await wait('document.getElementById("notice").textContent.includes("Password saved") && !busy');
+    await evaluate('document.getElementById("login-password").value="first-test-passphrase"; document.getElementById("email-password-login").requestSubmit()');
+    await wait('document.getElementById("notice").textContent.includes("Sign-in could not complete") && !busy');
+    assert.equal(await evaluate('document.getElementById("workspace").hidden'),true);
+    await evaluate('document.getElementById("login-password").value="reset-test-passphrase"; document.getElementById("email-password-login").requestSubmit()');
+    await wait('!document.getElementById("workspace").hidden && !busy');
+    await evaluate('document.getElementById("logout").click()');
+    await wait('document.getElementById("workspace").hidden && !busy');
     }
     await evaluate('document.querySelector("#auth-providers button").click()');
     await wait('!document.getElementById("workspace").hidden && !document.getElementById("refresh").disabled');

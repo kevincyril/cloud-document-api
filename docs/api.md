@@ -30,6 +30,13 @@ Migration 007 is additive. Setup and release checks: [auth setup](auth-setup.md)
 and an identity from a configured social provider. The tester allowlist is never
 included in the public configuration response.
 
+The managed browser supports email/password sign-in. Account creation and
+password recovery verify an email code with Supabase before `updateUser` saves
+the new password. Recovery disables account creation. Passwords and codes go
+directly to Supabase, never to the application's legacy login/register routes.
+Already-issued application sessions retain their original one-hour expiry
+after a password reset; immediate all-device revocation is not implemented.
+
 # Receipt and purchase API (local implementation)
 
 Authenticated `/purchases` supports create, list, detail, and full replacement
