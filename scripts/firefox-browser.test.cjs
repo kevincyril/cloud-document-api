@@ -1,5 +1,5 @@
 // Optional real Firefox check using its WebDriver BiDi endpoint; no driver,
-// paid service, production schema, or customer receipt is involved.
+// paid service or production schema is involved. Optional file regressions use localhost only.
 require('tsx/cjs');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -74,6 +74,17 @@ test('Firefox real receipt OCR, confirmation, private preview, calendar, cancell
     assert.match(calendar, /DTSTART;VALUE=DATE:20261120/);
     assert.equal(await evaluate(`(async()=> (await request('/documents/${receiptId}/download',{},true)).size)()`), (await readFile(path.resolve(__dirname, '../public/samples/maple-goods.png'))).length);
     assert.match(await evaluate('document.querySelector(".purchase-money").textContent'), /USD 34.57/);
+    if (process.env.RECEIPT_SMALL_TEST_IMAGE) {
+      const bytes = (await readFile(process.env.RECEIPT_SMALL_TEST_IMAGE)).toString('base64');
+      await evaluate(`(()=>{document.getElementById('editor-close').click();const dt=new DataTransfer();dt.items.add(new File([Uint8Array.from(atob(${JSON.stringify(bytes)}),c=>c.charCodeAt(0))],'small-print-layout-regression.png',{type:'image/png'}));document.getElementById('receipt-file').files=dt.files;document.getElementById('receipt-upload-form').requestSubmit()})()`);
+      await wait('document.getElementById("raw-ocr").textContent.includes("Company Name") && !document.getElementById("purchase-save").disabled',60000);
+      if (process.env.RECEIPT_SMALL_OCR_OUTPUT) await writeFile(process.env.RECEIPT_SMALL_OCR_OUTPUT, await evaluate('document.getElementById("raw-ocr").textContent'));
+      assert.equal(await evaluate('document.getElementById("purchase-date").value'),'2013-06-24');
+      assert.equal(await evaluate('document.getElementById("purchase-amount").value'),'470.12');
+      assert.equal(await evaluate('document.getElementById("purchase-currency").value'),'');
+      await evaluate('document.querySelector("[data-dollar-currency=USD]").click()');
+      assert.equal(await evaluate('document.getElementById("purchase-currency").value'),'USD');
+    }
     await command('browsingContext.setViewport', { context, viewport: { width: 390, height: 844 } });
     assert.equal(await evaluate('document.documentElement.scrollWidth<=window.innerWidth'), true);
     await evaluate(`(()=>{document.getElementById('editor-close').click();document.getElementById('sample-receipt').click()})()`);

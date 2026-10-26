@@ -202,6 +202,20 @@ test('browser receipt OCR, review, deadline, private originals, calendar, fallba
       await wait('document.querySelectorAll(".purchase-card").length===2 && !document.getElementById("purchase-save").disabled');
       assert.equal(await evaluate('Array.from(document.querySelectorAll(".purchase-card")).some(card=>card.querySelector("h3").textContent==="East Repair Inc." && card.querySelector(".purchase-money").textContent==="USD 154.06")'), true);
     }
+    if (process.env.RECEIPT_SMALL_TEST_IMAGE) {
+      // Private local-only small-print regression; never publish the attached file.
+      const bytes = (await readFile(process.env.RECEIPT_SMALL_TEST_IMAGE)).toString('base64');
+      await evaluate(`document.getElementById('editor-close').click();{const dt=new DataTransfer();dt.items.add(new File([Uint8Array.from(atob(${JSON.stringify(bytes)}),c=>c.charCodeAt(0))],'small-print-layout-regression.png',{type:'image/png'}));document.getElementById('receipt-file').files=dt.files;document.getElementById('receipt-upload-form').requestSubmit()}`);
+      await wait('document.getElementById("raw-ocr").textContent.includes("Company Name") && !document.getElementById("purchase-save").disabled', 60000);
+      if (process.env.RECEIPT_SMALL_OCR_OUTPUT) await writeFile(process.env.RECEIPT_SMALL_OCR_OUTPUT, await evaluate('document.getElementById("raw-ocr").textContent'));
+      assert.equal(await evaluate('document.getElementById("purchase-date").value'), '2013-06-24');
+      if ((await evaluate('document.getElementById("raw-ocr").textContent')).includes('Date: 6/242013')) assert.match(await evaluate('document.getElementById("review-warnings").textContent'), /date separator.*recovered/);
+      assert.equal(await evaluate('document.getElementById("purchase-amount").value'), '470.12');
+      assert.equal(await evaluate('document.getElementById("purchase-currency").value'), '');
+      assert.equal(await evaluate('document.getElementById("receipt-dollar-choices").hidden'), false);
+      await evaluate('document.querySelector("[data-dollar-currency=USD]").click()');
+      assert.equal(await evaluate('document.getElementById("purchase-currency").value'), 'USD');
+    }
     // Cancellation during initialization removes the frame/worker and allows saving.
     await evaluate('document.getElementById("editor-close").click(); document.getElementById("sample-receipt").click()');
     await wait('!document.getElementById("ocr-progress").hidden');

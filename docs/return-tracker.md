@@ -324,3 +324,18 @@ days ahead, excluding returned purchases. Parser review now supports written
 English dates, additional final-total labels, grouped and comma-decimal amounts,
 and Unicode business names. Ambiguities remain blank or highlighted per field;
 there are no invented confidence percentages or automatic policy claims.
+
+Small receipt images with a missing date or total get bounded local detail
+reads of the header and footer. Detected DATE/TOTAL word positions guide a
+second read of the original pixels; the same worker is reused and the stored
+original is unchanged. Date parsing may restore one lost separator in an
+explicitly labeled date field, with a visible review warning and normal
+calendar/ambiguity checks. A bare dollar sign still does not prove USD; the
+form offers explicit USD/CAD/AUD choices instead of guessing. Symbols in fax
+numbers and conflicting dollar/pound artifacts no longer imply GBP.
+
+Local opt-in regression: set `RECEIPT_SMALL_TEST_IMAGE` to a private small-print
+PNG before running `npm run test:browser` or `npm run test:firefox`. The supplied
+template is tested only on localhost; image bytes and raw OCR are not committed
+or uploaded to production by the test. The detail pass adds work only for
+small images with missing key fields and remains cancellable.

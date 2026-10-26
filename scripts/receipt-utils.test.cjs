@@ -105,3 +105,17 @@ test('additional receipt layouts normalize totals and explicit dates without gue
   assert.equal(U.parseReceipt('Example Store\nReceipt Date: 2026/10/21\nTOTAL USD 12.50').purchaseDate,'2026-10-21');
   assert.equal(U.parseReceipt('Example Store\nTOTAL KWD 1,234').amount,null);
 });
+test('split currency/total rows and fax glyphs do not fabricate a purchase currency', () => {
+  const result = U.parseReceipt('Example Company\nDATE 6/24/2013\nFax: £00) 000-0000\nSUBTOTAL\n£20.12\nTOTAL\n$\n470.12');
+  assert.equal(result.purchaseDate,'2013-06-24'); assert.equal(result.amount,'470.12'); assert.equal(result.currency,null);
+  assert.equal(U.parseReceipt('SHOP\nFax: £00) 000-0000\nTOTAL 25.00').currency,null);
+  assert.equal(U.parseReceipt('SHOP\nTOTAL\nGBP\n25.00').amount,'25.00');
+  assert.equal(U.parseReceipt('SHOP\nTOTAL\n£\n25.00').currency,'GBP');
+});
+test('one lost date separator is recoverable only with date-field evidence and calendar checks', () => {
+  assert.equal(U.parseReceipt('Example Company\nDate: 6/242013\nTOTAL $470.12').purchaseDate,'2013-06-24');
+  assert.equal(U.parseReceipt('Example Company\nReceipt date: 6/242013\nTOTAL $470.12').purchaseDate,'2013-06-24');
+  assert.equal(U.parseReceipt('Example Company\nInvoice # 6/242013\nTOTAL $470.12').purchaseDate,null);
+  assert.equal(U.parseReceipt('Example Company\nDate: 6/112013\nTOTAL $470.12').purchaseDate,null);
+  assert.equal(U.parseReceipt('Example Company\nDate: 2/302013\nTOTAL $470.12').purchaseDate,null);
+});

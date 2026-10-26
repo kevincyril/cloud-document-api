@@ -133,7 +133,8 @@
     }
   }
   function reviewFields() {
-    for (const [id, key, evidence] of [['purchase-merchant','merchant',/merchant.*uncertain/i], ['purchase-date','purchaseDate',/date.*(?:ambiguous|suggested|not clearly)|day\/month|month\/day/i], ['purchase-amount','amount',/total.*(?:missing|uncertain)/i], ['purchase-currency','currency',/currency|USD suggested/i]]) {
+    $('receipt-dollar-choices').hidden = !draft?.ocr || !/\$/.test(draft.ocr) || Boolean($('purchase-currency').value);
+    for (const [id, key, evidence] of [['purchase-merchant','merchant',/merchant.*uncertain/i], ['purchase-date','purchaseDate',/date.*(?:ambiguous|suggested|not clearly|separator)|day\/month|month\/day/i], ['purchase-amount','amount',/total.*(?:missing|uncertain)/i], ['purchase-currency','currency',/currency|USD suggested/i]]) {
       const field = $(id), note = $(id + '-review');
       if (!draft?.ocr) { note.textContent = ''; field.classList.remove('needs-review'); continue; }
       const original = draft.suggestions?.[key], value = field.value.trim();
@@ -330,6 +331,11 @@
   $('purchase-filter').onchange = changeView; $('purchase-sort').onchange = changeView;
   $('purchase-form').addEventListener('input', sync);
   $('purchase-form').addEventListener('change', sync);
+  document.querySelectorAll('[data-dollar-currency]').forEach(button => { button.onclick = () => {
+    $('purchase-currency').value = button.dataset.dollarCurrency;
+    $('purchase-currency').dispatchEvent(new Event('change', { bubbles: true }));
+    notice(`${button.dataset.dollarCurrency} selected by you. Check the date and total before saving.`);
+  }; });
   $('purchase-query').oninput = changeView;
   $('purchase-query-clear').onclick = () => { $('purchase-query').value = ''; changeView(); $('purchase-query').focus(); };
   $('show-due-soon').onclick = () => { $('purchase-filter').value = 'due_soon'; changeView(); $('purchase-list-status').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
