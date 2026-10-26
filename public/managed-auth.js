@@ -24,9 +24,10 @@ function createAuthStorage(storage, now = Date.now) {
 }
 if (typeof module !== 'undefined') module.exports = { createAuthStorage };
 if (typeof window !== 'undefined') {
-  let client, settings, pendingToken = '', storage, clearing = Promise.resolve();
+  let client, settings, pendingToken = '', pendingEmail = '', resendAfter = 0, storage, clearing = Promise.resolve();
   const managed = window.ManagedAuth = { enabled: false, clear() {
     pendingToken = ''; $('auth-link').hidden = true; $('legacy-password').value = '';
+    pendingEmail = ''; $('email-code-verify').hidden = true; $('email-code').value = ''; $('email-code-request').reset();
     // Let the SDK revoke its session before removing its in-memory token.
     // New attempts wait so this cleanup cannot erase a later sign-in.
     if (client) clearing = client.auth.signOut({ scope: 'local' }).catch(() => {}).finally(() => storage.clear());
@@ -42,20 +43,8 @@ if (typeof window !== 'undefined') {
     pendingToken = ''; $('auth-link').reset(); $('auth-link').hidden = true;
     await completeSignIn(body);
   }
-  async function submit(register) {
-    await clearing;
-    if (!settings.emailEnabled) throw new Error('Use one of the sign-in providers below.');
-    const email = $('email').value.trim(), password = $('password').value;
-    if (register) {
-      const data = check(await client.auth.signUp({ email, password, options: { emailRedirectTo: settings.redirectTo, data: { name: $('name').value.trim() } } }));
-      $('password').value = '';
-      if (data.session) { await client.auth.signOut({ scope: 'local' }); throw new Error('Email confirmation must be enabled by the app administrator before registration is available.'); }
-      notice('Check your inbox for a verification link. Open it in this browser, then sign in.');
-    } else {
-      const data = check(await client.auth.signInWithPassword({ email, password }));
-      $('password').value = '';
-      await exchange(data.session);
-    }
+  async function submit() {
+    throw new Error('Use the email code form or a sign-in provider.');
   }
   managed.ready = (async () => {
     // Remove callback credentials immediately, including obsolete implicit-flow tokens.
@@ -71,20 +60,39 @@ if (typeof window !== 'undefined') {
     await new Promise((resolve, reject) => { const script = document.createElement('script'); script.src = '/app/auth/supabase.js'; script.onload = resolve; script.onerror = () => reject(new Error('Unable to load sign-in. Refresh to try again.')); document.head.append(script); });
     storage = createAuthStorage(sessionStorage);
     client = window.supabase.createClient(settings.url, settings.key, { global: { fetch: (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(10000) }) }, auth: { flowType: 'pkce', storageKey: 'return-keeper-auth', storage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
-    $('managed-options').hidden = false; $('auth-resend').hidden = !settings.emailEnabled;
-    $('auth-form').hidden = !settings.emailEnabled;
-    $('managed-help').textContent = settings.emailEnabled ? 'Verify your email before signing in, or use a sign-in provider. Existing users: create a verified account with the same email, then enter your previous workspace password once to link your receipts.' : 'Choose a sign-in provider. Existing users can link their receipts with their previous workspace password.';
+    $('managed-options').hidden = false; $('email-code-request').hidden = !settings.emailEnabled;
+    $('auth-form').hidden = true;
+    $('managed-help').textContent = settings.emailEnabled ? 'Sign in with a code sent to your email, or use a sign-in provider. Existing users can link their receipts with their previous workspace password after verifying their email.' : 'Choose a sign-in provider. Existing users can link their receipts with their previous workspace password.';
     if (settings.restricted) $('managed-help').textContent = 'Preview: sign-in is limited to invited testers. ' + $('managed-help').textContent;
     for (const provider of settings.providers) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = `Continue with ${provider === 'github' ? 'GitHub' : provider[0].toUpperCase() + provider.slice(1)}`;
       button.onclick = () => action('Opening sign-in…', async () => { await clearing; check(await client.auth.signInWithOAuth({ provider, options: { redirectTo: settings.redirectTo } })); });
       $('auth-providers').append(button);
     }
-    $('auth-resend').onclick = () => action('Sending verification email…', async () => {
-      const email = $('email').value.trim(); if (!$('email').checkValidity() || !email) throw new Error('Enter a valid email address first.');
-      check(await client.auth.resend({ type: 'signup', email, options: { emailRedirectTo: settings.redirectTo } }));
-      notice('If this account needs verification, a new link has been sent. Check your inbox and spam folder.');
-    });
+    $('code-email').oninput = () => {
+      pendingEmail = ''; pendingToken = ''; $('auth-link').hidden = true; $('legacy-password').value = '';
+      $('email-code-verify').hidden = true; $('email-code').value = ''; $('email-code-send').textContent = 'Send sign-in code';
+    };
+    $('email-code-request').onsubmit = event => { event.preventDefault(); action('Sending sign-in code…', async () => {
+      await clearing;
+      if (!settings.emailEnabled) throw new Error('Email sign-in is not enabled.');
+      const email = $('code-email').value.trim().toLowerCase();
+      if (!$('code-email').checkValidity() || !email) throw new Error('Enter a valid email address first.');
+      if (Date.now() < resendAfter) throw new Error('Wait at least 60 seconds before requesting another code.');
+      resendAfter = Date.now() + 60000;
+      check(await client.auth.signInWithOtp({ email, options: { shouldCreateUser: true } }));
+      pendingEmail = email; pendingToken = ''; $('auth-link').hidden = true; $('legacy-password').value = '';
+      $('email-code').value = ''; $('email-code-verify').hidden = false; $('email-code-send').textContent = 'Resend sign-in code';
+      $('email-code').focus(); notice('Check your inbox and spam folder for your sign-in code. Enter the latest code below.');
+    }); };
+    $('email-code-verify').onsubmit = event => { event.preventDefault(); action('Verifying sign-in code…', async () => {
+      if (!pendingEmail || pendingEmail !== $('code-email').value.trim().toLowerCase()) throw new Error('Request a code for this email first.');
+      const code = $('email-code').value.trim(); $('email-code').value = '';
+      if (!/^\d{6,10}$/.test(code)) throw new Error('Enter the numeric code from your email.');
+      const result = await client.auth.verifyOtp({ email: pendingEmail, token: code, type: 'email' });
+      if (result.error) throw new Error(result.error.status === 429 ? 'Too many attempts. Wait before trying again.' : 'That code is invalid or expired. Try the latest code, or request another.');
+      await exchange(result.data.session);
+    }); };
     $('auth-link').onsubmit = event => { event.preventDefault(); action('Linking your workspace…', async () => {
       const password = $('legacy-password').value; $('legacy-password').value = '';
       if (!pendingToken) throw new Error('Sign in again before linking your workspace.');

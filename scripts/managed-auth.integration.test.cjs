@@ -19,11 +19,23 @@ process.env.STORAGE_DRIVER = 'local';
 process.env.JWT_SECRET = randomUUID();
 const identities = new Map();
 test('managed sign-in verifies identities and preserves ownership during linking', { timeout: 30000 }, async t => {
+  let otpIssued = false, otpUsed = false;
   const provider = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
     if (req.method === 'OPTIONS') { res.end(); return; }
+    if (req.url.startsWith('/auth/v1/otp')) { otpIssued = true; otpUsed = false; res.end('{}'); return; }
+    if (req.url.startsWith('/auth/v1/verify')) {
+      let raw = ''; req.on('data', chunk => { raw += chunk; }); req.on('end', () => {
+        const input = JSON.parse(raw);
+        if (!otpIssued || otpUsed || input.token !== '123456' || input.email !== 'verified@example.com' || input.type !== 'email') {
+          res.writeHead(403); res.end(JSON.stringify({ code: 'otp_expired', msg: 'Token has expired or is invalid' })); return;
+        }
+        otpUsed = true;
+        res.end(JSON.stringify({ access_token: identities.get('browserToken'), refresh_token: 'simulated-refresh-token', expires_in: 3600, token_type: 'bearer', user: identities.get('verified') }));
+      }); return;
+    }
     if (req.url.startsWith('/auth/v1/authorize')) {
       const next = new URL(new URL(req.url, 'http://127.0.0.1').searchParams.get('redirect_to'));
       next.searchParams.set('code', 'simulated-authorization-code');
@@ -119,7 +131,7 @@ test('managed sign-in verifies identities and preserves ownership during linking
       const result = await call('exchange', { accessToken: 'outage' });
       assert.equal(result.status, 503); assert.ok(!JSON.stringify(result.body).includes('private provider'));
     });
-    if (process.env.AUTH_BROWSER_TEST === 'true') await t.test('real browser signup, verified sign-in, and OAuth PKCE callback', { timeout: 45000 }, async () => {
+    if (process.env.AUTH_BROWSER_TEST === 'true') await t.test('real browser email-code validation, single use, resend limits, and OAuth PKCE callback', { timeout: 45000 }, async () => {
       const { config } = require(compiled ? '../dist/config.js' : '../src/config.ts');
       config.APP_URL = base + '/app/';
       await require('./managed-auth-browser-helper.cjs').checkBrowser(base);

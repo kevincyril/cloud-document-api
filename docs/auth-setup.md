@@ -1,6 +1,6 @@
 # Verified email and social sign-in
 
-The implementation is opt-in. Production continues using the existing login until the settings below are configured and tested. No SMTP account, paid plan, or Apple membership is created by this change.
+Google login is deployed as a restricted preview. Passwordless email-code login is also implemented, and stays disabled until SMTP and the email templates below are ready. No SMTP account, paid plan, or Apple membership is created by this change.
 
 ## Google
 
@@ -13,14 +13,44 @@ The implementation is opt-in. Production continues using the existing login unti
 
 See [Supabase Google setup](https://supabase.com/docs/guides/auth/social-login/auth-google). Google can be enabled before email registration is ready.
 
-## Email verification
+## Email sign-in with a verification code
+
+### SMTP quick start with Resend
+
+Create a [Resend account](https://resend.com/) using the same email you will use for the private preview. Choose the free plan for testing. Create an API key in Resend, then enter it directly into Supabase's SMTP password field; never paste it into chat or commit it.
+
+In the [Supabase project](https://supabase.com/dashboard/project/xhnfcmpidcnmgsfuktyf), open Authentication → Email → SMTP Settings (some dashboard layouts place this under Project Settings → Authentication), enable custom SMTP, and enter:
+
+| Setting | Value |
+| --- | --- |
+| Host | `smtp.resend.com` |
+| Port | `465` |
+| Username | `resend` |
+| Password | Your Resend API key |
+| Sender name | `Return Keeper` |
+| Sender email for private testing | `onboarding@resend.dev` |
+
+The test sender only sends to the address associated with your Resend account. To send codes to other users, verify a domain you control in Resend and replace the sender with an address on that domain. Do not buy a domain just to test your own login. See [SMTP settings](https://resend.com/docs/send-with-smtp) and [test-sender restrictions](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain).
+
+Save SMTP settings, then complete the email-template steps below. Tell the app maintainer when SMTP and both templates are saved; the new local code must be deployed with email enabled before the code form appears on the live site.
+
+### Templates and delivery checks
 
 1. Keep the Email provider's **Confirm email** setting enabled. Do not disable it to get around delivery problems.
 2. Choose an SMTP provider in your own account and verify a sender/domain you control. Check the provider's costs before signing up; this project does not require a paid plan.
 3. Under Supabase → Project Settings → Authentication → SMTP Settings (or Authentication → Email → SMTP), enter the SMTP host, port, username, password, sender address, and sender name supplied by that provider. Put credentials only in the dashboard.
-4. Configure the same Site URL and redirect allowlist as above. Send a test, then check inbox and spam folders.
+4. Under Authentication → Email Templates, update **Magic Link** and **Confirm signup** to show a code. Include `{{ .Token }}` instead of requiring a confirmation-link click. Updating both covers existing and first-time users. For example:
 
-The [built-in Supabase sender](https://supabase.com/docs/guides/auth/auth-smtp) only delivers to authorized project team addresses and is unsuitable for public signup. Set `AUTH_EMAIL_ENABLED=true` only after custom SMTP works. Registration requires verification; verification emails can be resent from the sign-in screen. Password recovery is not included in this change; existing-account linking requires the previous workspace password.
+   ```html
+   <h2>Your Return Keeper sign-in code</h2>
+   <p>Enter this code in the app: <strong>{{ .Token }}</strong></p>
+   <p>If you did not request this code, ignore this email.</p>
+   ```
+
+5. Under the Email provider settings, choose a short OTP expiry (for example 600 seconds) and use six digits. Keep provider-side rate limits enabled. The app accepts numeric codes of 6–10 digits and enforces a 60-second resend wait; Supabase also limits and verifies attempts.
+6. Set `AUTH_EMAIL_ENABLED=true` on the existing Render service and deploy, while keeping `AUTH_PUBLIC_ENABLED=false` and the tester allowlist in place. Test actual inbox delivery, a wrong/expired code, a successful code, and rejection of code reuse before public release.
+
+The [built-in Supabase sender](https://supabase.com/docs/guides/auth/auth-smtp) only delivers to authorized project team addresses and is unsuitable for public signup. Set `AUTH_EMAIL_ENABLED=true` only after custom SMTP and the templates are ready. The user enters an email, receives a one-time code, and verifies it in the app. No new password is needed. First-time users can create an account through the same verified flow. Supabase generates, expires, rate-limits, and verifies the code; this app never stores or logs it. Existing-account linking still requires the previous workspace password to preserve ownership. See [Supabase passwordless email setup](https://supabase.com/docs/guides/auth/auth-email-passwordless).
 
 ## App configuration
 
@@ -45,7 +75,7 @@ The existing service is configured directly through Render environment variables
 
 Existing users first authenticate with a verified identity using their existing email, then prove ownership with their previous workspace password. This preserves IDs, documents, and purchases. Matching email alone never links accounts. If the old password is lost, manual ownership recovery is needed; do not delete the old account or automatically link it by email.
 
-Sessions remain in browser memory and last up to one hour. Refreshing signs out. Only PKCE flow verifiers, not access/refresh tokens, are stored in sessionStorage for up to 15 minutes. Open verification links in the browser where registration started; if the verifier is unavailable, try signing in after verification or request a fresh link. Application tokens already issued remain valid until their one-hour expiry after provider logout/revocation or a mode change.
+Sessions remain in browser memory and last up to one hour. Refreshing signs out. Only PKCE flow verifiers, not access/refresh tokens, are stored in sessionStorage for up to 15 minutes for redirect flows. Email codes are entered directly into the app and cleared after each attempt. Application tokens already issued remain valid until their one-hour expiry after provider logout/revocation or a mode change.
 
 ## Apple and release checks
 

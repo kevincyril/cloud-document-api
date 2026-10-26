@@ -25,20 +25,27 @@ exports.checkBrowser = async (base, { googleOnly = false } = {}) => {
     assert.equal(await evaluate('document.querySelector("#auth-providers button").textContent'), 'Continue with Google');
     if (googleOnly) {
       assert.equal(await evaluate('document.getElementById("auth-form").hidden'), true);
-      assert.equal(await evaluate('document.getElementById("auth-resend").hidden'), true);
+      assert.equal(await evaluate('document.getElementById("email-code-request").hidden'), true);
       assert.match(await evaluate('document.getElementById("managed-help").textContent'), /invited testers/);
     } else {
-    await evaluate('document.getElementById("auth-toggle").click(); document.getElementById("name").value="Browser Verified"; document.getElementById("email").value="verified@example.com"; document.getElementById("password").value="example-password"; document.getElementById("auth-form").requestSubmit()');
-    await wait('document.getElementById("notice").textContent.includes("Check your inbox") && !document.getElementById("auth-submit").disabled');
+    assert.equal(await evaluate('document.getElementById("auth-form").hidden'), true);
+    await evaluate('document.getElementById("code-email").value="verified@example.com"; document.getElementById("email-code-request").requestSubmit()');
+    await wait('document.getElementById("notice").textContent.includes("Check your inbox") && !document.getElementById("email-code-send").disabled');
     assert.equal(await evaluate('document.getElementById("workspace").hidden'), true);
     assert.equal(await evaluate('localStorage.length'), 0);
     assert.equal(await evaluate('Object.values(sessionStorage).some(value => value.includes("refresh_token") || value.includes("access_token"))'), false);
-    await evaluate('document.getElementById("auth-resend").click()');
-    await wait('document.getElementById("notice").textContent.includes("new link has been sent") && !document.getElementById("auth-submit").disabled');
-    await evaluate('document.getElementById("auth-toggle").click(); document.getElementById("password").value="example-password"; document.getElementById("auth-form").requestSubmit()');
+    await evaluate('document.getElementById("email-code-request").requestSubmit()');
+    await wait('document.getElementById("notice").textContent.includes("Wait at least 60 seconds") && !document.getElementById("email-code-send").disabled');
+    await evaluate('document.getElementById("email-code").value="999999"; document.getElementById("email-code-verify").requestSubmit()');
+    await wait('document.getElementById("notice").textContent.includes("invalid or expired") && !document.getElementById("email-code-confirm").disabled');
+    assert.equal(await evaluate('document.getElementById("workspace").hidden'),true);
+    assert.equal(await evaluate('document.getElementById("email-code").value'),'');
+    await evaluate('document.getElementById("email-code").value="123456"; document.getElementById("email-code-verify").requestSubmit()');
     await wait('!document.getElementById("workspace").hidden && !document.getElementById("refresh").disabled');
     assert.equal(await evaluate('localStorage.length'), 0);
     assert.equal(await evaluate('Object.values(sessionStorage).some(value => value.includes("refresh_token") || value.includes("access_token"))'), false);
+    const reused = await evaluate('(async () => { const cfg = await (await fetch("/auth/config")).json(); const response = await fetch(cfg.url + "/auth/v1/verify", {method:"POST",headers:{"Content-Type":"application/json",apikey:cfg.key},body:JSON.stringify({email:"verified@example.com",token:"123456",type:"email"})}); return response.status; })()');
+    assert.equal(reused,403);
     await evaluate('document.getElementById("logout").click()');
     await wait('document.getElementById("workspace").hidden');
     }
